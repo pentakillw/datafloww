@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
   LayoutDashboard, Database, Wand2, BarChart3, 
-  FileCode, Moon, Sun, LogOut, ChevronLeft, ChevronRight
+  FileCode, Moon, Sun, LogOut, ChevronLeft, ChevronRight, ShieldCheck, Scale
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import ToastContainer from './ToastContainer';
 
 export default function Layout() {
   const [darkMode, setDarkMode] = useState(true); 
-  const [sidebarOpen, setSidebarOpen] = useState(true); // Nuevo estado
+  const [sidebarOpen, setSidebarOpen] = useState(true); 
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -52,7 +52,7 @@ export default function Layout() {
             </div>
           </div>
 
-          <nav className="flex-1 py-6 px-3 space-y-2">
+          <nav className="flex-1 py-6 px-3 space-y-2 overflow-y-auto custom-scrollbar">
             {menuItems.map((item) => (
               <button
                 key={item.path}
@@ -81,7 +81,20 @@ export default function Layout() {
           </nav>
 
           {/* Footer Actions */}
-          <div className="p-3 border-t border-wolf/20 space-y-2">
+          <div className="p-3 border-t border-wolf/20 space-y-2 bg-gray-50 dark:bg-black/20">
+             
+             {/* Enlaces Legales Sutiles (Solo visibles si el sidebar está abierto) */}
+             {sidebarOpen && (
+               <div className="px-2 py-2 mb-2 space-y-1">
+                 <Link to="/terms" target="_blank" className="flex items-center gap-2 text-[10px] text-gray-400 hover:text-persian transition-colors">
+                   <Scale size={10} /> Términos de Uso
+                 </Link>
+                 <Link to="/privacy" target="_blank" className="flex items-center gap-2 text-[10px] text-gray-400 hover:text-persian transition-colors">
+                   <ShieldCheck size={10} /> Privacidad
+                 </Link>
+               </div>
+             )}
+
              <button onClick={toggleTheme} className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-wolf/10 text-carbon dark:text-wolf transition-colors" title="Cambiar Tema">
                 {darkMode ? <Sun size={20} /> : <Moon size={20} />}
                 {sidebarOpen && <span className="ml-3 text-sm">Tema</span>}

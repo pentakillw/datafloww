@@ -4,13 +4,17 @@ import { supabase } from './lib/supabase';
 import { DataProvider } from './context/DataContext';
 
 import Layout from './components/Layout';
-import LandingPage from './pages/LandingPage'; // NUEVO
+import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import DataWorkspace from './pages/DataWorkspace';
 import TransformationStudio from './pages/TransformationStudio';
 import AnalysisDashboard from './pages/AnalysisDashboard';
 import ExportHub from './pages/ExportHub';
+
+// --- NUEVAS PÁGINAS LEGALES ---
+import TermsPage from './pages/TermsPage';
+import PrivacyPage from './pages/PrivacyPage';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -39,10 +43,14 @@ export default function App() {
         {/* Ruta pública: Landing Page */}
         <Route path="/landing" element={!session ? <LandingPage /> : <Navigate to="/" />} />
         
+        {/* Rutas Legales (Públicas) */}
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/privacy" element={<PrivacyPage />} />
+
         {/* Login */}
         <Route path="/login" element={!session ? <Login /> : <Navigate to="/" />} />
         
-        {/* Rutas protegidas */}
+        {/* Rutas protegidas (Requieren Login) */}
         <Route element={session ? <Layout /> : <Navigate to="/landing" />}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/data" element={<DataWorkspace />} />

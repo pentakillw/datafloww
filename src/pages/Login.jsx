@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Database, Mail, Loader2, ArrowRight, Lock, UserPlus, LogIn } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Database, Mail, Loader2, Lock, UserPlus, LogIn } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
 
 export default function Login() {
   const [isSignUp, setIsSignUp] = useState(false); // Toggle entre Login y Registro
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false); // Nuevo estado para el checkbox
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const navigate = useNavigate();
@@ -18,6 +19,11 @@ export default function Login() {
 
     try {
       if (isSignUp) {
+        // --- VALIDACIÓN LEGAL OBLIGATORIA ---
+        if (!acceptedTerms) {
+          throw new Error("Debes aceptar los Términos y Condiciones para crear tu cuenta.");
+        }
+
         // --- REGISTRO ---
         const { error } = await supabase.auth.signUp({
           email,
@@ -93,6 +99,22 @@ export default function Login() {
               />
             </div>
           </div>
+
+          {/* CHECKBOX DE TÉRMINOS (SOLO VISIBLE EN REGISTRO) */}
+          {isSignUp && (
+            <div className="flex items-start gap-2 pt-2 animate-in slide-in-from-top-2">
+              <input 
+                type="checkbox" 
+                id="terms"
+                checked={acceptedTerms}
+                onChange={(e) => setAcceptedTerms(e.target.checked)}
+                className="mt-1 w-4 h-4 rounded border-gray-500 text-persian focus:ring-persian bg-black/20 cursor-pointer"
+              />
+              <label htmlFor="terms" className="text-xs text-wolf leading-tight cursor-pointer select-none">
+                He leído y acepto los <Link to="/terms" target="_blank" className="text-persian hover:text-white hover:underline font-bold transition-colors">Términos de Uso</Link> y el <Link to="/privacy" target="_blank" className="text-persian hover:text-white hover:underline font-bold transition-colors">Aviso de Privacidad</Link>. Entiendo que está prohibida la reventa del software generado.
+              </label>
+            </div>
+          )}
 
           {/* Mensaje de Error */}
           {errorMsg && (
