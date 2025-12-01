@@ -1,0 +1,59 @@
+import React, { useEffect, useState } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { supabase } from './lib/supabase';
+import { DataProvider } from './context/DataContext';
+
+import Layout from './components/Layout';
+import LandingPage from './pages/LandingPage'; // NUEVO
+import Login from './pages/Login';
+import Dashboard from './pages/Dashboard';
+import DataWorkspace from './pages/DataWorkspace';
+import TransformationStudio from './pages/TransformationStudio';
+import AnalysisDashboard from './pages/AnalysisDashboard';
+import ExportHub from './pages/ExportHub';
+
+export default function App() {
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (loading) {
+    return <div className="min-h-screen bg-[#0f1115] flex items-center justify-center text-teal-500 font-mono">Cargando sistema...</div>;
+  }
+
+  return (
+    <DataProvider>
+      <Routes>
+        {/* Ruta pública: Landing Page */}
+        <Route path="/landing" element={!session ? <LandingPage /> : <Navigate to="/" />} />
+        
+        {/* Login */}
+        <Route path="/login" element={!session ? <Login /> : <Navigate to="/" />} />
+        
+        {/* Rutas protegidas */}
+        <Route element={session ? <Layout /> : <Navigate to="/landing" />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/data" element={<DataWorkspace />} />
+          <Route path="/transform" element={<TransformationStudio />} />
+          <Route path="/analysis" element={<AnalysisDashboard />} />
+          <Route path="/export" element={<ExportHub />} />
+        </Route>
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to={session ? "/" : "/landing"} />} />
+      </Routes>
+    </DataProvider>
+  );
+}

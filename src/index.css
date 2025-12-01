@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    /* MODO CLARO: Fondo gris muy suave (zinc-50), Texto gris oscuro (gray-900) */
+    /* MODO OSCURO: Fondo Carbon, Texto Zinc */
+    @apply font-sans antialiased text-gray-900 dark:text-zinc bg-gray-50 dark:bg-carbon transition-colors duration-300;
+  }
+}
+
+@layer components {
+  /* Input adaptable: Borde visible en modo claro, sin borde en oscuro */
+  .input-dark {
+    @apply w-full bg-white dark:bg-[#333] border border-gray-300 dark:border-transparent rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-zinc focus:outline-none focus:ring-2 focus:ring-persian/50 dark:focus:ring-persian transition-all placeholder:text-gray-400 dark:placeholder:text-wolf/50;
+  }
+
+  /* Botón pequeño primario */
+  .btn-primary-sm {
+    @apply bg-persian hover:bg-sea text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md hover:shadow-lg transition-all flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed uppercase tracking-wider;
+  }
+
+  /* Estilos para las tablas en modo claro/oscuro */
+  .table-header {
+    @apply p-3 border-b border-gray-200 dark:border-wolf/20 text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-wolf bg-gray-100 dark:bg-[#1a1a1a] select-none;
+  }
+  
+  .table-cell {
+    @apply p-3 text-sm text-gray-700 dark:text-zinc/80 border-b border-gray-100 dark:border-wolf/5 whitespace-nowrap max-w-[200px] overflow-hidden text-ellipsis;
+  }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 dark:bg-wolf/30 rounded-full hover:bg-persian transition-colors;
+}
