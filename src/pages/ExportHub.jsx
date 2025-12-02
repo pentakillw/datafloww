@@ -66,6 +66,25 @@ export default function ExportHub() {
             
             switch (action.type) {
                 // --- ESTRUCTURA ---
+                case 'REORDER_COLS':
+                    // Genera código para reordenar columnas
+                    // Filtramos para asegurar que solo incluimos columnas que existen en el dataframe
+                    const colList = action.newOrder.map(c => `'${c}'`).join(', ');
+                    transformationSteps += `            desired_cols = [${colList}]\n`;
+                    transformationSteps += `            existing_cols = [c for c in desired_cols if c in df.columns]\n`;
+                    transformationSteps += `            df = df[existing_cols]\n`;
+                    break;
+                case 'DUPLICATE':
+                    transformationSteps += `            if '${action.col}' in df.columns:\n`;
+                    transformationSteps += `                # Buscar nombre único\n`;
+                    transformationSteps += `                base_name = '${action.col}_Copy'\n`;
+                    transformationSteps += `                i = 1\n`;
+                    transformationSteps += `                new_name = base_name\n`;
+                    transformationSteps += `                while new_name in df.columns:\n`;
+                    transformationSteps += `                    new_name = f"{base_name}{i}"\n`;
+                    transformationSteps += `                    i += 1\n`;
+                    transformationSteps += `                df[new_name] = df['${action.col}']\n`;
+                    break;
                 case 'DROP_COLUMN': 
                     transformationSteps += `            if '${action.col}' in df.columns: df.drop(columns=['${action.col}'], inplace=True)\n`; 
                     break;
@@ -152,6 +171,17 @@ export default function ExportHub() {
                     transformationSteps += `            df['${action.col}'] = pd.to_numeric(df['${action.col}'], errors='coerce').round(${action.decimals})\n`; 
                     break;
                 
+                // --- DATA SCIENCE ---
+                case 'Z-SCORE':
+                    transformationSteps += `            if '${action.col}' in df.columns:\n                mean = df['${action.col}'].mean()\n                std = df['${action.col}'].std()\n                df['${action.col}_ZScore'] = (df['${action.col}'] - mean) / std\n`;
+                    break;
+                case 'MIN-MAX':
+                    transformationSteps += `            if '${action.col}' in df.columns:\n                min_val = df['${action.col}'].min()\n                max_val = df['${action.col}'].max()\n                df['${action.col}_Norm'] = (df['${action.col}'] - min_val) / (max_val - min_val)\n`;
+                    break;
+                case 'ONE-HOT':
+                    transformationSteps += `            if '${action.col}' in df.columns:\n                dummies = pd.get_dummies(df['${action.col}'], prefix='${action.col}')\n                df = pd.concat([df, dummies], axis=1)\n`;
+                    break;
+
                 default:
                     transformationSteps += `            # Acción ${action.type} (Lógica no mapeada en exportación)\n`;
             }

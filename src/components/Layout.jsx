@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
   LayoutDashboard, Database, Wand2, BarChart3, 
-  FileCode, Moon, Sun, LogOut, ChevronLeft, ChevronRight, ShieldCheck, Scale
+  FileCode, Moon, Sun, LogOut, ChevronLeft, ChevronRight, ShieldCheck, Scale,
+  BookOpen
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import ToastContainer from './ToastContainer';
@@ -29,6 +30,7 @@ export default function Layout() {
     { icon: <Wand2 size={20} />, label: 'Transformar', path: '/transform' },
     { icon: <BarChart3 size={20} />, label: 'Análisis', path: '/analysis' },
     { icon: <FileCode size={20} />, label: 'Exportar', path: '/export' },
+    { icon: <BookOpen size={20} />, label: 'Documentación', path: '/docs' },
   ];
 
   return (
