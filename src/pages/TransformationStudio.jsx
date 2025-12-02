@@ -13,7 +13,7 @@ import {
   Shuffle, Braces, Info, Minimize2, Maximize2, X,
   ArrowRightLeft, BrainCircuit, BarChart4, TrendingUp, MoreVertical,
   ArrowUpAZ, Copy, ArrowLeft, ArrowRight, GripVertical,
-  PlusSquare, Zap, PlayCircle, Wand2, CheckCircle2, ScanSearch, MousePointerClick // <--- ¡AHORA SÍ ESTÁ AQUÍ!
+  PlusSquare, Zap, PlayCircle, Wand2, CheckCircle2, ScanSearch, MousePointerClick // <--- ¡AHORA SÍ ESTÁ!
 } from 'lucide-react';
 
 // ============================================================================
@@ -783,6 +783,7 @@ const DropdownMenu = ({ label, icon, children, isOpen, onClick }) => {
 };
 
 // Componente para iconos que no están en lucide-react (Placeholders)
+// Eliminada prop 'size' no usada
 const PlayFunction = () => <div className="text-[8px] border border-current rounded px-0.5">fx</div>;
 
 const DropdownSectionTitle = ({ title }) => (
