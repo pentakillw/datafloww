@@ -49,8 +49,8 @@ export default function Layout() {
                  <Database size={18} />
                </div>
                <span className={`transition-opacity duration-200 text-xl text-carbon dark:text-zinc ${!sidebarOpen && 'opacity-0 w-0'}`}>
-                 DATA<span className="text-persian">FLOW</span>
-               </span>
+                NoCode<span className="text-persian">PY</span>
+                </span>
             </div>
           </div>
 

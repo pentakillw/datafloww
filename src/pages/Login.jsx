@@ -59,7 +59,7 @@ export default function Login() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-persian/10 mb-4 text-persian transition-transform hover:scale-110 duration-300">
             <Database size={32} />
           </div>
-          <h1 className="text-2xl font-bold text-zinc font-mono tracking-tight">DataFlow Pro</h1>
+          <h1 className="text-2xl font-bold text-zinc font-mono tracking-tight">NoCodePY</h1>
           <p className="text-wolf text-sm mt-2">
             {isSignUp ? 'Crea tu cuenta profesional' : 'Bienvenido de nuevo'}
           </p>
