@@ -12,6 +12,7 @@ import TransformationStudio from './pages/TransformationStudio';
 import AnalysisDashboard from './pages/AnalysisDashboard';
 import ExportHub from './pages/ExportHub';
 import DocsPage from './pages/DocsPage';
+import InstallGuide from './pages/InstallGuide';
 
 // --- NUEVAS PÁGINAS LEGALES ---
 import TermsPage from './pages/TermsPage';
@@ -59,6 +60,7 @@ export default function App() {
           <Route path="/analysis" element={<AnalysisDashboard />} />
           <Route path="/export" element={<ExportHub />} />
           <Route path="/docs" element={<DocsPage />} />
+          <Route path="/guide" element={<InstallGuide />} />
         </Route>
 
         {/* Fallback */}

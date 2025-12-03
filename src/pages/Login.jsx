@@ -4,10 +4,10 @@ import { Database, Mail, Loader2, Lock, UserPlus, LogIn } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 
 export default function Login() {
-  const [isSignUp, setIsSignUp] = useState(false); // Toggle entre Login y Registro
+  const [isSignUp, setIsSignUp] = useState(false); 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [acceptedTerms, setAcceptedTerms] = useState(false); // Nuevo estado para el checkbox
+  const [acceptedTerms, setAcceptedTerms] = useState(false); 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
   const navigate = useNavigate();
@@ -19,27 +19,24 @@ export default function Login() {
 
     try {
       if (isSignUp) {
-        // --- VALIDACIÓN LEGAL OBLIGATORIA ---
         if (!acceptedTerms) {
           throw new Error("Debes aceptar los Términos y Condiciones para crear tu cuenta.");
         }
 
-        // --- REGISTRO ---
         const { error } = await supabase.auth.signUp({
           email,
           password,
         });
         if (error) throw error;
         alert('¡Registro exitoso! Revisa tu correo para confirmar tu cuenta.');
-        setIsSignUp(false); // Cambiar a login para que el usuario entre
+        setIsSignUp(false); 
       } else {
-        // --- LOGIN ---
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
-        navigate('/'); // Redirigir al Dashboard si es exitoso
+        navigate('/'); 
       }
     } catch (error) {
       setErrorMsg(error.message);
@@ -50,7 +47,6 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-carbon flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Fondo decorativo */}
       <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-persian via-sea to-purple-500"></div>
       
       <div className="w-full max-w-md bg-carbon-light border border-wolf/10 rounded-2xl p-8 shadow-2xl z-10 animate-in fade-in zoom-in-95 duration-500">
@@ -67,7 +63,6 @@ export default function Login() {
 
         <form onSubmit={handleAuth} className="space-y-5">
           
-          {/* Email Input */}
           <div>
             <label className="block text-xs font-semibold text-wolf uppercase mb-2 ml-1">Email</label>
             <div className="relative group">
@@ -83,7 +78,6 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Password Input */}
           <div>
             <label className="block text-xs font-semibold text-wolf uppercase mb-2 ml-1">Contraseña</label>
             <div className="relative group">
@@ -100,7 +94,6 @@ export default function Login() {
             </div>
           </div>
 
-          {/* CHECKBOX DE TÉRMINOS (SOLO VISIBLE EN REGISTRO) */}
           {isSignUp && (
             <div className="flex items-start gap-2 pt-2 animate-in slide-in-from-top-2">
               <input 
@@ -116,14 +109,12 @@ export default function Login() {
             </div>
           )}
 
-          {/* Mensaje de Error */}
           {errorMsg && (
             <div className="text-red-400 text-xs bg-red-900/10 p-3 rounded border border-red-900/20 flex items-center gap-2 animate-in slide-in-from-left-2">
               <span className="font-bold">Error:</span> {errorMsg}
             </div>
           )}
 
-          {/* Botón de Acción Principal */}
           <button 
             disabled={loading}
             className="w-full bg-gradient-to-r from-persian to-sea hover:from-sea hover:to-persian text-white font-bold py-3 rounded-lg flex items-center justify-center transition-all disabled:opacity-50 shadow-lg shadow-persian/20 hover:shadow-persian/40 active:scale-[0.98]"
@@ -133,7 +124,6 @@ export default function Login() {
           </button>
         </form>
 
-        {/* Toggle Login/Register */}
         <div className="mt-6 text-center">
           <p className="text-wolf text-xs">
             {isSignUp ? '¿Ya tienes cuenta?' : '¿No tienes cuenta?'}

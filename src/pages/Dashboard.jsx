@@ -1,201 +1,169 @@
 import React from 'react';
 import { useData } from '../context/DataContext';
 import { 
-  Plus, UploadCloud, PlayCircle, FolderOpen, Clock, Activity, 
-  ArrowRight, FileText, Database, Sparkles, Zap, ChevronRight
+  UploadCloud, Database, Sparkles, Zap, BookOpen, 
+  MonitorPlay, ArrowRight, FileSpreadsheet, Server,
+  Activity, CheckCircle2, ChevronRight, Crown, AlertTriangle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { data, columns, actions } = useData();
-
-  // Cálculo de estadísticas reales basadas en tu contexto
+  const { data, actions, userTier, planLimits, filesUploadedCount, simulateUpgrade } = useData();
   const totalRows = data.length;
-  const totalCols = columns.length;
-  const totalActions = actions.length;
-  
-  const stats = [
-    { 
-      title: 'Filas Cargadas', 
-      value: totalRows.toLocaleString(), 
-      icon: <Database size={20} />, 
-      color: 'text-persian', 
-      bg: 'bg-persian/10',
-      trend: data.length > 0 ? 'Dataset activo' : 'Esperando datos'
-    },
-    { 
-      title: 'Columnas', 
-      value: totalCols, 
-      icon: <FileText size={20} />, 
-      color: 'text-blue-400', 
-      bg: 'bg-blue-500/10',
-      trend: 'Estructura actual'
-    },
-    { 
-      title: 'Transformaciones', 
-      value: totalActions, 
-      icon: <Zap size={20} />, 
-      color: 'text-yellow-400', 
-      bg: 'bg-yellow-500/10',
-      trend: 'En esta sesión'
-    },
-  ];
+
+  // Calculamos porcentaje de uso del plan
+  const filesUsed = filesUploadedCount;
+  const filesMax = planLimits.maxFiles;
+  const usagePercent = Math.min(100, (filesUsed / filesMax) * 100);
 
   return (
-    <div className="h-full flex items-start p-3 bg-gray-50/50 dark:bg-black/20 animate-in fade-in zoom-in-95 duration-300 relative overflow-hidden">
-      <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-carbon relative z-10 rounded-xl border border-gray-200 dark:border-wolf/10 shadow-sm overflow-auto h-full p-6 md:p-8 custom-scrollbar">
+    <div className="h-full flex flex-col p-6 bg-gray-50/50 dark:bg-black/20 animate-in fade-in zoom-in-95 duration-300 relative overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-carbon relative z-10 rounded-xl border border-gray-200 dark:border-wolf/10 shadow-sm overflow-auto h-full custom-scrollbar">
         
-        {/* Header de Bienvenida */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-zinc tracking-tight">Dashboard</h1>
-            <p className="text-gray-500 dark:text-wolf mt-1">Resumen de tu espacio de trabajo actual.</p>
-          </div>
-          <div className="flex gap-3">
-             <button 
-                onClick={() => navigate('/data')}
-                className="bg-white dark:bg-white/5 border border-gray-200 dark:border-wolf/10 text-gray-700 dark:text-zinc px-4 py-2 rounded-lg font-medium hover:bg-gray-50 dark:hover:bg-white/10 transition-colors flex items-center gap-2"
-              >
-                <UploadCloud size={18} /> Cargar Datos
-              </button>
-              <button 
-                onClick={() => navigate('/transform')}
-                className="bg-persian hover:bg-sea text-white px-5 py-2 rounded-lg font-semibold flex items-center shadow-lg shadow-persian/20 transition-all active:scale-95"
-              >
-                <Sparkles size={18} className="mr-2" /> Ir al Estudio
-              </button>
-          </div>
-        </div>
+        {/* HERO BANNER - Ahora muestra el estado del plan */}
+        <div className="relative bg-gradient-to-r from-persian via-sea to-purple-500 p-8 rounded-t-xl overflow-hidden">
+           <div className="absolute top-0 right-0 p-8 opacity-10 text-white pointer-events-none">
+             <Sparkles size={180} />
+           </div>
+           
+           <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+             <div>
+               <div className="flex items-center gap-3 mb-2">
+                 <h1 className="text-3xl font-black text-white tracking-tight">Hola, Analista</h1>
+                 {userTier === 'pro' && <span className="bg-yellow-400 text-black text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1"><Crown size={10} fill="currentColor"/> PRO</span>}
+                 {userTier === 'free' && <span className="bg-gray-200/20 text-white text-xs font-bold px-2 py-0.5 rounded-full border border-white/20">FREE</span>}
+               </div>
+               <p className="text-teal-100 text-lg max-w-xl leading-relaxed">
+                 {userTier === 'free' 
+                    ? 'Estás en el plan gratuito. Actualiza para eliminar límites y exportar código.' 
+                    : 'Tienes acceso total a las herramientas de generación de código.'}
+               </p>
+             </div>
 
-        {/* Tarjetas de Estadísticas (Ahora con datos reales) */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {stats.map((stat, idx) => (
-            <div key={idx} className="bg-gray-50 dark:bg-carbon-light p-6 rounded-xl border border-gray-200 dark:border-wolf/20 shadow-sm hover:border-persian/30 transition-all group relative overflow-hidden">
-              <div className={`absolute top-0 right-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity ${stat.color}`}>
-                 {React.cloneElement(stat.icon, { size: 64 })}
-              </div>
-              
-              <div className="flex justify-between items-start relative z-10">
-                 <div className={`p-3 rounded-lg ${stat.bg} ${stat.color}`}>
-                    {stat.icon}
-                 </div>
-                 <span className="text-xs font-medium bg-white dark:bg-white/5 px-2 py-1 rounded-full text-gray-500 dark:text-wolf border border-gray-100 dark:border-white/5">
-                    {stat.trend}
-                 </span>
-              </div>
-              
-              <div className="mt-4 relative z-10">
-                 <h3 className="text-3xl font-bold text-gray-900 dark:text-zinc">{stat.value}</h3>
-                 <p className="text-sm font-medium text-gray-500 dark:text-wolf mt-1">{stat.title}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Columna Izquierda: Actividad y Banner (2/3 del ancho) */}
-            <div className="lg:col-span-2 flex flex-col gap-6">
+             {/* Tarjeta de Estado de Cuenta (Límites) */}
+             <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-xl p-4 w-full md:w-64 text-white">
+                <div className="flex justify-between items-center mb-2">
+                   <span className="text-xs font-bold uppercase opacity-80">Archivos Usados</span>
+                   <span className="text-xs font-mono">{filesUsed} / {filesMax}</span>
+                </div>
+                <div className="w-full bg-black/20 h-2 rounded-full overflow-hidden mb-3">
+                   <div 
+                     className={`h-full transition-all duration-500 ${usagePercent > 80 ? 'bg-red-400' : 'bg-green-400'}`} 
+                     style={{ width: `${usagePercent}%` }}
+                   ></div>
+                </div>
                 
-                {/* Banner Hero */}
-                <div className="bg-gradient-to-r from-persian/20 to-purple-500/10 rounded-2xl p-6 border border-persian/10 relative overflow-hidden">
-                    <div className="relative z-10">
-                        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Comienza a transformar datos</h3>
-                        <p className="text-gray-600 dark:text-gray-300 max-w-lg mb-6 text-sm leading-relaxed">
-                            DataFlow Pro te permite limpiar, filtrar y enriquecer tus datasets en segundos. 
-                            Utiliza nuestras herramientas de IA para detectar anomalías automáticamente.
-                        </p>
-                        <button onClick={() => navigate('/data')} className="text-persian dark:text-white font-bold text-sm hover:underline flex items-center gap-1">
-                            Comenzar ahora <ArrowRight size={16}/>
-                        </button>
-                    </div>
-                    <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none">
-                        <Activity size={180} />
-                    </div>
+                {userTier === 'free' && (
+                  <button 
+                    onClick={simulateUpgrade}
+                    className="w-full bg-white text-persian hover:bg-gray-100 text-xs font-bold py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-1"
+                  >
+                    <Sparkles size={12} /> Actualizar a PRO
+                  </button>
+                )}
+             </div>
+           </div>
+        </div>
+        
+        {/* Accesos Rápidos & Stats */}
+        <div className="bg-gray-50 dark:bg-carbon-light px-8 py-4 border-b border-gray-200 dark:border-wolf/20 flex flex-wrap items-center gap-6">
+             <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${totalRows > 0 ? 'bg-green-500/10 text-green-500' : 'bg-gray-100 dark:bg-white/5 text-gray-400'}`}>
+                  <Database size={18} />
                 </div>
-
-                {/* Feed de Actividad Reciente */}
                 <div>
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-zinc mb-4 flex items-center gap-2">
-                        <Clock size={18} className="text-persian"/> Actividad Reciente
-                    </h3>
-                    <div className="bg-gray-50 dark:bg-carbon-light rounded-xl border border-gray-200 dark:border-wolf/20 overflow-hidden">
-                        {actions.length === 0 ? (
-                            <div className="p-8 text-center text-gray-400 dark:text-wolf">
-                                <p className="text-sm">No hay actividad registrada en esta sesión.</p>
-                                <p className="text-xs opacity-70 mt-1">Realiza transformaciones para verlas aquí.</p>
-                            </div>
-                        ) : (
-                            <div className="divide-y divide-gray-200 dark:divide-wolf/10">
-                                {actions.slice(0, 5).map((action, i) => (
-                                    <div key={i} className="p-4 flex items-center gap-4 hover:bg-white dark:hover:bg-white/5 transition-colors">
-                                        <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-white/10 flex items-center justify-center text-xs font-bold text-gray-500 dark:text-wolf">
-                                            {i + 1}
-                                        </div>
-                                        <div className="flex-1">
-                                            <p className="text-sm font-semibold text-gray-800 dark:text-zinc">{action.type}</p>
-                                            <p className="text-xs text-gray-500 dark:text-wolf truncate max-w-md">{action.description}</p>
-                                        </div>
-                                        <span className="text-[10px] text-gray-400 font-mono bg-gray-100 dark:bg-black/30 px-2 py-1 rounded whitespace-nowrap">
-                                            {action.timestamp}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                        {actions.length > 0 && (
-                            <div className="p-3 bg-gray-100 dark:bg-white/5 text-center border-t border-gray-200 dark:border-wolf/10">
-                                <button onClick={() => navigate('/transform')} className="text-xs font-bold text-persian hover:text-sea">Ir al Historial Completo</button>
-                            </div>
-                        )}
-                    </div>
+                  <p className="text-xs font-medium text-gray-500 dark:text-wolf uppercase">Filas Cargadas</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-zinc">{totalRows.toLocaleString()}</p>
                 </div>
-            </div>
+             </div>
+             
+             <div className="h-8 w-px bg-gray-200 dark:bg-wolf/10 hidden md:block"></div>
 
-            {/* Columna Derecha: Accesos Rápidos (1/3 del ancho) */}
-            <div className="flex flex-col gap-6">
-                <div className="bg-gray-50 dark:bg-carbon-light rounded-xl border border-gray-200 dark:border-wolf/20 p-5">
-                    <h3 className="text-sm font-bold text-gray-900 dark:text-zinc mb-4 uppercase tracking-wider">Accesos Rápidos</h3>
-                    <div className="space-y-2">
-                        <QuickLink icon={<UploadCloud size={16} />} label="Importar CSV/Excel" onClick={() => navigate('/data')} />
-                        <QuickLink icon={<Database size={16} />} label="Gestionar Fuentes" onClick={() => {}} />
-                        <QuickLink icon={<PlayCircle size={16} />} label="Ver Tutoriales" onClick={() => {}} />
-                        <QuickLink icon={<FolderOpen size={16} />} label="Mis Proyectos" onClick={() => {}} />
-                    </div>
+             <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${actions.length > 0 ? 'bg-persian/10 text-persian' : 'bg-gray-100 dark:bg-white/5 text-gray-400'}`}>
+                  <Activity size={18} />
                 </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 dark:text-wolf uppercase">Acciones</p>
+                  <p className="text-sm font-bold text-gray-900 dark:text-zinc">{actions.length} aplicadas</p>
+                </div>
+             </div>
 
-                <div className="bg-persian/5 rounded-xl border border-persian/20 p-5">
-                    <h3 className="text-sm font-bold text-persian mb-2 flex items-center gap-2">
-                        <Sparkles size={16}/> Novedades v2.0
-                    </h3>
-                    <ul className="space-y-3 mt-4">
-                        <li className="text-xs text-gray-600 dark:text-wolf flex gap-2 items-start">
-                            <span className="w-1.5 h-1.5 rounded-full bg-persian mt-1.5 shrink-0"></span>
-                            <span>Nuevo motor de limpieza inteligente con detección de anomalías.</span>
-                        </li>
-                        <li className="text-xs text-gray-600 dark:text-wolf flex gap-2 items-start">
-                            <span className="w-1.5 h-1.5 rounded-full bg-persian mt-1.5 shrink-0"></span>
-                            <span>Exportación directa a scripts de Python (Tkinter).</span>
-                        </li>
-                        <li className="text-xs text-gray-600 dark:text-wolf flex gap-2 items-start">
-                            <span className="w-1.5 h-1.5 rounded-full bg-persian mt-1.5 shrink-0"></span>
-                            <span>Interfaz "Zen Mode" optimizada para pantallas pequeñas.</span>
-                        </li>
-                    </ul>
-                </div>
-            </div>
+             <div className="flex-1"></div>
+
+             {data.length > 0 && (
+                <button onClick={() => navigate('/transform')} className="bg-persian hover:bg-sea text-white px-4 py-2 rounded-lg font-semibold flex items-center shadow-md transition-all text-sm animate-in slide-in-from-right">
+                   <Zap size={16} className="mr-2" /> Continuar Transformando
+                </button>
+             )}
         </div>
 
+        <div className="p-8">
+            
+            {/* SECCIÓN 2: GUÍAS CRÍTICAS */}
+            <h2 className="text-xl font-bold text-gray-900 dark:text-zinc mb-6 flex items-center gap-2">
+               <Server size={22} className="text-persian"/> Preparación del Entorno
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+                <div 
+                  onClick={() => navigate('/guide')}
+                  className="group cursor-pointer bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/10 p-6 rounded-2xl border border-blue-200 dark:border-blue-900/30 relative overflow-hidden transition-all hover:shadow-lg hover:-translate-y-1"
+                >
+                   <div className="absolute top-0 right-0 p-4 opacity-20 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform"><MonitorPlay size={80} /></div>
+                   <div className="relative z-10">
+                      <div className="p-3 bg-blue-500 text-white rounded-xl inline-block mb-4 shadow-md"><MonitorPlay size={28} /></div>
+                      <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">1. Guía de Ejecución</h3>
+                      <p className="text-gray-600 dark:text-blue-100 text-sm mb-4 leading-relaxed">Prepara tu computadora con Python para ejecutar los scripts generados.</p>
+                      <div className="flex items-center gap-2 text-sm font-bold text-blue-600 dark:text-blue-300 group-hover:underline">Ver pasos <ArrowRight size={16} /></div>
+                   </div>
+                </div>
+
+                <div 
+                  onClick={() => navigate('/docs')}
+                  className="group cursor-pointer bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/10 p-6 rounded-2xl border border-purple-200 dark:border-purple-900/30 relative overflow-hidden transition-all hover:shadow-lg hover:-translate-y-1"
+                >
+                   <div className="absolute top-0 right-0 p-4 opacity-20 text-purple-600 dark:text-purple-400 group-hover:scale-110 transition-transform"><BookOpen size={80} /></div>
+                   <div className="relative z-10">
+                      <div className="p-3 bg-purple-500 text-white rounded-xl inline-block mb-4 shadow-md"><BookOpen size={28} /></div>
+                      <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">2. Documentación</h3>
+                      <p className="text-gray-600 dark:text-purple-100 text-sm mb-4 leading-relaxed">Catálogo completo de funciones de transformación y limpieza.</p>
+                      <div className="flex items-center gap-2 text-sm font-bold text-purple-600 dark:text-purple-300 group-hover:underline">Explorar <ArrowRight size={16} /></div>
+                   </div>
+                </div>
+            </div>
+
+            {/* SECCIÓN 3: FLUJO */}
+            <h2 className="text-xl font-bold text-gray-900 dark:text-zinc mb-6 flex items-center gap-2">
+               <Zap size={22} className="text-persian"/> Flujo de Trabajo
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <ActionCard icon={<UploadCloud size={32} />} title="Cargar Datos" desc="Importa CSV o Excel." onClick={() => navigate('/data')} color="persian" active={data.length === 0} />
+                <ActionCard icon={<Sparkles size={32} />} title="Transformar" desc="Limpia y estructura." onClick={() => navigate('/transform')} color="sea" active={data.length > 0 && actions.length === 0} disabled={data.length === 0} />
+                <ActionCard icon={<FileSpreadsheet size={32} />} title="Exportar" desc="Descarga o automatiza." onClick={() => navigate('/export')} color="purple-500" active={actions.length > 0} disabled={data.length === 0} />
+            </div>
+
+        </div>
       </div>
     </div>
   );
 }
 
-// Componente auxiliar para los links rápidos
-const QuickLink = ({ icon, label, onClick }) => (
-    <button onClick={onClick} className="w-full flex items-center gap-3 p-3 rounded-lg bg-white dark:bg-carbon border border-gray-200 dark:border-wolf/10 hover:border-persian/50 hover:shadow-sm transition-all text-sm text-gray-700 dark:text-zinc group text-left">
-        <div className="text-gray-400 group-hover:text-persian transition-colors">{icon}</div>
-        <span className="flex-1">{label}</span>
-        <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity text-persian"/>
+function ActionCard({ icon, title, desc, onClick, color, active, disabled }) {
+  const colorClasses = {
+    'persian': 'bg-persian text-white group-hover:shadow-persian/50',
+    'sea': 'bg-sea text-white group-hover:shadow-sea/50',
+    'purple-500': 'bg-purple-500 text-white group-hover:shadow-purple-500/50',
+  };
+  const textColors = { 'persian': 'text-persian', 'sea': 'text-sea', 'purple-500': 'text-purple-500' };
+
+  return (
+    <button onClick={onClick} disabled={disabled} className={`group text-left relative p-6 rounded-2xl border transition-all ${disabled ? 'opacity-50 cursor-not-allowed bg-gray-50 dark:bg-carbon border-gray-200 dark:border-wolf/10' : 'bg-white dark:bg-carbon-light border-gray-200 dark:border-wolf/20 hover:border-transparent hover:shadow-xl hover:-translate-y-1 cursor-pointer'}`}>
+       {active && <div className="absolute top-4 right-4"><span className="relative flex h-3 w-3"><span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-${color}`}></span><span className={`relative inline-flex rounded-full h-3 w-3 bg-${color}`}></span></span></div>}
+       <div className={`p-4 rounded-xl inline-block mb-4 shadow-sm transition-shadow ${disabled ? 'bg-gray-200 dark:bg-wolf/10 text-gray-400' : colorClasses[color]}`}>{icon}</div>
+       <h3 className={`text-lg font-bold mb-2 ${disabled ? 'text-gray-500 dark:text-wolf' : 'text-gray-900 dark:text-zinc'}`}>{title}</h3>
+       <p className={`text-sm leading-relaxed mb-4 ${disabled ? 'text-gray-400 dark:text-wolf/60' : 'text-gray-600 dark:text-wolf'}`}>{desc}</p>
+       <div className={`flex items-center gap-2 text-sm font-bold transition-colors ${disabled ? 'text-gray-400' : `${textColors[color]} group-hover:underline`}`}>{disabled ? 'Espera...' : 'Abrir'} <ChevronRight size={16} className={disabled ? '' : 'group-hover:translate-x-1 transition-transform'} /></div>
     </button>
-);
+  );
+}

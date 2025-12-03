@@ -10,455 +10,491 @@ const safeNum = (val) => {
 const isValidDate = (d) => d instanceof Date && !isNaN(d);
 
 export function useDataTransform() {
-  const { data, setData, columns, setColumns, logAction, showToast, setHistory } = useData();
+  const { 
+    data, columns, actions, 
+    originalData, originalColumns,
+    updateDataState, updateActionsState, logAction, showToast 
+  } = useData();
 
   // ==========================================
-  // MOTOR DE INFERENCIA HEURÍSTICA
+  // 1. MOTOR DE TRANSFORMACIÓN (LÓGICA PURA)
+  // ==========================================
+  const applyActionLogic = (currentData, currentCols, action) => {
+      let newData = [...currentData];
+      let newCols = [...currentCols];
+
+      switch (action.type) {
+          case 'DROP_COLUMN':
+              newData = newData.map(row => { const r = {...row}; delete r[action.col]; return r; });
+              newCols = newCols.filter(c => c !== action.col);
+              break;
+          case 'RENAME':
+              newData = newData.map(r => { const nr = {...r}; nr[action.newVal] = nr[action.col]; delete nr[action.col]; return nr; });
+              newCols = newCols.map(c => c === action.col ? action.newVal : c);
+              break;
+          case 'REORDER_COLS':
+              newCols = action.newOrder;
+              break;
+          case 'ADD_INDEX':
+              if(!newCols.includes('ID')) newCols = ['ID', ...newCols];
+              newData = newData.map((r, i) => ({ 'ID': i+1, ...r }));
+              break;
+          case 'DROP_TOP_ROWS':
+              newData = newData.slice(action.count);
+              break;
+          case 'SMART_CLEAN':
+              newData = newData.map(row => {
+                  const newRow = {};
+                  Object.keys(row).forEach(key => {
+                      let val = row[key];
+                      if (typeof val === 'string') { val = val.trim(); if (['null', 'nan', ''].includes(val.toLowerCase())) val = null; }
+                      newRow[key] = val;
+                  });
+                  return newRow;
+              }).filter(row => Object.values(row).some(v => v !== null && v !== ''));
+              newData = Array.from(new Set(newData.map(r => JSON.stringify(r)))).map(s => JSON.parse(s));
+              break;
+          case 'DROP_DUPLICATES':
+              newData = Array.from(new Set(newData.map(r => JSON.stringify(r)))).map(s => JSON.parse(s));
+              break;
+          case 'FILL_DOWN':
+              let last = null;
+              newData = newData.map(r => { const v = r[action.col]; if(v!==null && v!=='') last = v; return {...r, [action.col]: last}; });
+              break;
+          case 'FILL_NULLS':
+              newData = newData.map(r => ({...r, [action.col]: (r[action.col]===null || r[action.col]==='') ? action.val : r[action.col]}));
+              break;
+          case 'TRIM':
+              newData = newData.map(r => ({...r, [action.col]: safeStr(r[action.col]).trim()}));
+              break;
+          case 'CASE_CHANGE':
+              newData = newData.map(r => {
+                  let v = safeStr(r[action.col]);
+                  if(action.mode==='upper') v=v.toUpperCase();
+                  if(action.mode==='lower') v=v.toLowerCase();
+                  if(action.mode==='title') v=v.toLowerCase().replace(/(?:^|\s)\S/g, a=>a.toUpperCase());
+                  return {...r, [action.col]: v};
+              });
+              break;
+          case 'SPLIT':
+              const c1 = `${action.col}_1`, c2 = `${action.col}_2`;
+              newData = newData.map(r => { const p = safeStr(r[action.col]).split(action.delim); return {...r, [c1]: p[0]||'', [c2]: p.slice(1).join(action.delim)||''}; });
+              if(!newCols.includes(c1)) newCols = [...newCols, c1, c2];
+              break;
+          case 'MERGE_COLS':
+              const nm = `${action.col1}_${action.col2}`;
+              newData = newData.map(r => ({...r, [nm]: `${safeStr(r[action.col1])}${action.sep}${safeStr(r[action.col2])}` }));
+              if(!newCols.includes(nm)) newCols = [...newCols, nm];
+              break;
+          case 'SUBSTR':
+             const nsub = `${action.col}_sub`;
+             newData = newData.map(r => ({...r, [nsub]: safeStr(r[action.col]).substr(action.start, action.len)}));
+             if(!newCols.includes(nsub)) newCols = [...newCols, nsub];
+             break;
+          case 'ADD_AFFIX':
+              newData = newData.map(r => ({ ...r, [action.col]: action.affixType === 'prefix' ? `${action.text}${safeStr(r[action.col])}` : `${safeStr(r[action.col])}${action.text}` }));
+              break;
+          case 'REGEX':
+             const nreg = `${action.col}_regex`;
+             try {
+                const re = new RegExp(action.pattern);
+                newData = newData.map(r => { const m = safeStr(r[action.col]).match(re); return {...r, [nreg]: m ? m[0] : ''} });
+                if(!newCols.includes(nreg)) newCols = [...newCols, nreg];
+             } catch { console.warn("Regex invalido en replay"); }
+             break;
+          case 'FILTER':
+              newData = newData.filter(row => {
+                  const cell = row[action.col];
+                  const sCell = safeStr(cell).toLowerCase();
+                  const sVal = safeStr(action.val).toLowerCase();
+                  if(action.condition === 'contains') return sCell.includes(sVal);
+                  if(action.condition === 'equals') return sCell === sVal;
+                  if(action.condition === 'starts_with') return sCell.startsWith(sVal);
+                  const nCell = parseFloat(cell), nVal = parseFloat(action.val);
+                  if(!isNaN(nCell) && !isNaN(nVal)) {
+                      if(action.condition === '>') return nCell > nVal;
+                      if(action.condition === '<') return nCell < nVal;
+                  }
+                  return true;
+              });
+              break;
+          case 'CALC_MATH':
+              newData = newData.map(r => {
+                  const v1=safeNum(r[action.col1]), v2=safeNum(r[action.col2]);
+                  let res=null;
+                  if(!isNaN(v1)&&!isNaN(v2)){
+                      if(action.op==='+') res=v1+v2; if(action.op==='-') res=v1-v2;
+                      if(action.op==='*') res=v1*v2; if(action.op==='/') res=v2!==0?v1/v2:0;
+                  }
+                  return {...r, [action.target]: res};
+              });
+              if(!newCols.includes(action.target)) newCols=[...newCols, action.target];
+              break;
+          case 'ADD_DAYS':
+              const d = parseInt(action.days)||0;
+              newData = newData.map(r => {
+                  const dt = new Date(r[action.col]);
+                  if(isValidDate(dt)) { dt.setDate(dt.getDate() + d); return {...r, [action.col]: dt.toISOString().split('T')[0]}; }
+                  return r;
+              });
+              break;
+          case 'DATE_PART':
+              const ncDate = `${action.col}_${action.part}`;
+              newData = newData.map(r => {
+                 const dt = new Date(r[action.col]);
+                 let res = null;
+                 if(isValidDate(dt)){
+                    if(action.part==='year') res = dt.getFullYear();
+                    if(action.part==='month') res = dt.getMonth()+1;
+                 }
+                 return {...r, [ncDate]: res};
+              });
+              if(!newCols.includes(ncDate)) newCols=[...newCols, ncDate];
+              break;
+          case 'SORT':
+              newData.sort((a,b) => a[action.col] > b[action.col] ? (action.dir==='asc'?1:-1) : (action.dir==='asc'?-1:1));
+              break;
+          case 'FROM_EXAMPLES':
+              if (action.rule) {
+                  // AHORA PASAMOS EL ÍNDICE (i) A applyRuleToRow
+                  newData = newData.map((row, i) => ({ ...row, [action.newCol]: applyRuleToRow(row, action.rule, i) }));
+                  if(!newCols.includes(action.newCol)) newCols = [...newCols, action.newCol];
+              }
+              break;
+          default:
+              console.warn("Acción no soportada en replay:", action.type);
+      }
+      return { data: newData, columns: newCols };
+  };
+
+  // ==========================================
+  // 2. FUNCIÓN PARA APLICAR LOTE DE ACCIONES
+  // ==========================================
+  const applyBatchTransform = (initialData, initialCols, actionsToApply) => {
+      let currentData = [...initialData];
+      let currentCols = [...initialCols];
+
+      try {
+          actionsToApply.forEach(action => {
+              const res = applyActionLogic(currentData, currentCols, action);
+              currentData = res.data;
+              currentCols = res.columns;
+          });
+          return { data: currentData, columns: currentCols };
+      } catch (err) {
+          console.error("Error aplicando batch:", err);
+          return { data: initialData, columns: initialCols }; 
+      }
+  };
+
+  const deleteActionFromHistory = (indexToDelete) => {
+      if (!originalData || originalData.length === 0) {
+          showToast('No se puede recalcular: Faltan datos originales. Recarga el archivo.', 'error');
+          return;
+      }
+      const newActions = actions.filter((_, idx) => idx !== indexToDelete);
+      
+      const res = applyBatchTransform(originalData, originalColumns, newActions);
+      
+      updateDataState(res.data, res.columns);
+      updateActionsState(newActions); 
+      showToast('Tabla recalculada.', 'success');
+  };
+
+  // ==========================================
+  // 4. MOTOR INTELIGENTE AVANZADO (PRO)
   // ==========================================
   
+  const applyRuleToRow = (row, rule, index) => {
+      if (!rule) return '';
+      try {
+          // --- REGLAS MATEMÁTICAS ---
+          if (rule.type.startsWith('math_')) {
+              const nCol1 = safeNum(row[rule.col1]);
+              
+              if (rule.type === 'math_col_op') {
+                  const nCol2 = safeNum(row[rule.col2]);
+                  if (isNaN(nCol1) || isNaN(nCol2)) return null;
+                  if (rule.op === '+') return nCol1 + nCol2;
+                  if (rule.op === '-') return nCol1 - nCol2;
+                  if (rule.op === '*') return nCol1 * nCol2;
+                  if (rule.op === '/') return nCol2 !== 0 ? nCol1 / nCol2 : 0;
+              }
+              
+              if (rule.type === 'math_const_op') {
+                  if (isNaN(nCol1)) return null;
+                  if (rule.op === '+') return nCol1 + rule.val;
+                  if (rule.op === '-') return nCol1 - rule.val;
+                  if (rule.op === '*') return nCol1 * rule.val;
+                  if (rule.op === '/') return rule.val !== 0 ? nCol1 / rule.val : 0;
+              }
+          }
+
+          // --- REGLAS DE SÍNTESIS DE TEXTO ---
+          if (rule.type === 'static_value') return rule.value;
+          
+          if (rule.type === 'append_index') {
+              const val = safeStr(row[rule.col]);
+              return val + (index + 1);
+          }
+          if (rule.type === 'static_prefix') {
+              const val = safeStr(row[rule.col]);
+              return rule.prefix + val;
+          }
+          if (rule.type === 'static_suffix') {
+              const val = safeStr(row[rule.col]);
+              return val + rule.suffix;
+          }
+          if (rule.type === 'concat_cols') {
+              const v1 = safeStr(row[rule.col1]);
+              const v2 = safeStr(row[rule.col2]);
+              return v1 + rule.sep + v2;
+          }
+
+          // Reglas Clásicas
+          const val = safeStr(row[rule.col]);
+          switch(rule.type) {
+              case 'copy': return val;
+              case 'upper': return val.toUpperCase();
+              case 'lower': return val.toLowerCase();
+              case 'title': return val.toLowerCase().replace(/(?:^|\s)\S/g, a=>a.toUpperCase());
+              case 'trim': return val.trim();
+              case 'word_extract': 
+                  const words = val.trim().split(/[\s,;]+/); 
+                  return words[rule.index] || '';
+              case 'substr_start': return val.substring(0, rule.len);
+              case 'extract_email':
+                  const emailMatch = val.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+                  return emailMatch ? emailMatch[0] : '';
+              default: return '';
+          }
+      } catch (e) { return ''; }
+  };
+
   const inferTransformation = (sourceData, examplesMap, limitToCols = null) => {
-    const exampleIndices = Object.keys(examplesMap).map(Number);
+    const exampleIndices = Object.keys(examplesMap).map(Number).sort((a,b) => a-b);
     if (exampleIndices.length === 0) return null;
 
-    const firstIdx = exampleIndices[0];
-    const firstTarget = examplesMap[firstIdx];
-    const firstRow = sourceData[firstIdx];
+    // Usamos hasta 2 ejemplos para inferencia
+    const idx1 = exampleIndices[0];
+    const row1 = sourceData[idx1];
+    const target1 = examplesMap[idx1]; 
     
-    if (firstTarget === undefined || firstTarget === null) return null;
+    const idx2 = exampleIndices.length > 1 ? exampleIndices[1] : null;
+    const row2 = idx2 !== null ? sourceData[idx2] : null;
+    const target2 = idx2 !== null ? examplesMap[idx2] : null;
 
+    if (target1 === undefined || !row1) return null;
+
+    const colsToScan = limitToCols || Object.keys(row1);
     const candidates = [];
-    const colsToScan = limitToCols || Object.keys(firstRow);
 
-    colsToScan.forEach(col => {
-        const sourceVal = safeStr(firstRow[col]);
-        if (!sourceVal) return;
+    // Detectar si el objetivo es numérico para priorizar matemáticas
+    const isNumTarget = !isNaN(parseFloat(target1));
 
-        if (sourceVal === firstTarget) candidates.push({ type: 'copy', col });
-        if (sourceVal.toUpperCase() === firstTarget) candidates.push({ type: 'upper', col });
-        if (sourceVal.toLowerCase() === firstTarget) candidates.push({ type: 'lower', col });
-        if (sourceVal.trim() === firstTarget) candidates.push({ type: 'trim', col });
-        if (sourceVal.startsWith(firstTarget)) candidates.push({ type: 'substring_start', col, len: firstTarget.length });
-        if (sourceVal.endsWith(firstTarget)) candidates.push({ type: 'substring_end', col, len: firstTarget.length });
+    // ---------------------------------------------------------
+    // 1. INFERENCIA MATEMÁTICA (Detecta Operaciones)
+    // ---------------------------------------------------------
+    if (isNumTarget) {
+        const t1 = parseFloat(target1);
+        const t2 = target2 !== null ? parseFloat(target2) : null;
 
-        if (sourceVal.includes(firstTarget) && firstTarget.length < sourceVal.length) {
-            const startIdx = sourceVal.indexOf(firstTarget);
-            const before = sourceVal.substring(0, startIdx);
-            const after = sourceVal.substring(startIdx + firstTarget.length);
-            
-            // Detectar delimitadores simples
-            let startDelim = before.length > 0 ? before.slice(-1) : '';
-            let endDelim = after.length > 0 ? after.slice(0, 1) : '';
+        colsToScan.forEach(colA => {
+            const vA1 = parseFloat(row1[colA]);
+            if (isNaN(vA1)) return;
 
-            // Refinamiento simple para delimitadores comunes
-            if ([' ', ',', '-', '_', '@', '.', '/'].includes(startDelim) || [' ', ',', '-', '_', '@', '.', '/'].includes(endDelim)) {
-                 candidates.push({ type: 'extract_between', col, startDelim, endDelim });
+            const vA2 = row2 ? parseFloat(row2[colA]) : null;
+
+            // A. Operaciones con Constante (Col A [op] K = Target)
+            // Suma: Col + K = T  => K = T - Col
+            const diff1 = t1 - vA1;
+            if (row2) {
+                if (Math.abs((t2 - vA2) - diff1) < 0.001) {
+                    candidates.push({ type: 'math_const_op', op: '+', col1: colA, val: diff1, description: `[${colA}] + ${diff1}` });
+                }
+            } else candidates.push({ type: 'math_const_op', op: '+', col1: colA, val: diff1, description: `[${colA}] + ${diff1}` });
+
+            // Multiplicación: Col * K = T => K = T / Col
+            if (vA1 !== 0) {
+                const factor1 = t1 / vA1;
+                if (row2) {
+                    if (vA2 !== 0 && Math.abs((t2 / vA2) - factor1) < 0.001) {
+                        candidates.push({ type: 'math_const_op', op: '*', col1: colA, val: factor1, description: `[${colA}] * ${factor1.toFixed(2)}` });
+                    }
+                } else candidates.push({ type: 'math_const_op', op: '*', col1: colA, val: factor1, description: `[${colA}] * ${factor1.toFixed(2)}` });
             }
-        }
-    });
 
-    // Lógica compleja simplificada para el ejemplo
-    if (candidates.length === 0) {
-       // Fallback a template simple si no encuentra patrón directo
-       // (Aquí iría la lógica avanzada de template del archivo original)
+            // B. Operaciones entre Dos Columnas (Col A [op] Col B = Target)
+            colsToScan.forEach(colB => {
+                if (colA === colB) return;
+                const vB1 = parseFloat(row1[colB]);
+                if (isNaN(vB1)) return;
+                
+                const vB2 = row2 ? parseFloat(row2[colB]) : null;
+
+                // Suma (A + B)
+                if (Math.abs((vA1 + vB1) - t1) < 0.001) {
+                    if (!row2 || Math.abs((vA2 + vB2) - t2) < 0.001) {
+                        candidates.push({ type: 'math_col_op', op: '+', col1: colA, col2: colB, description: `[${colA}] + [${colB}]` });
+                    }
+                }
+                // Resta (A - B)
+                if (Math.abs((vA1 - vB1) - t1) < 0.001) {
+                    if (!row2 || Math.abs((vA2 - vB2) - t2) < 0.001) {
+                        candidates.push({ type: 'math_col_op', op: '-', col1: colA, col2: colB, description: `[${colA}] - [${colB}]` });
+                    }
+                }
+                // Multiplicación (A * B)
+                if (Math.abs((vA1 * vB1) - t1) < 0.001) {
+                    if (!row2 || Math.abs((vA2 * vB2) - t2) < 0.001) {
+                        candidates.push({ type: 'math_col_op', op: '*', col1: colA, col2: colB, description: `[${colA}] * [${colB}]` });
+                    }
+                }
+                // División (A / B)
+                if (vB1 !== 0 && Math.abs((vA1 / vB1) - t1) < 0.001) {
+                    if (!row2 || (vB2 !== 0 && Math.abs((vA2 / vB2) - t2) < 0.001)) {
+                        candidates.push({ type: 'math_col_op', op: '/', col1: colA, col2: colB, description: `[${colA}] / [${colB}]` });
+                    }
+                }
+            });
+        });
     }
 
-    // Validación rápida
+    // ---------------------------------------------------------
+    // 2. INFERENCIA DE TEXTO Y ESTRUCTURA
+    // ---------------------------------------------------------
+    const sT1 = safeStr(target1);
+    const sT2 = target2 !== null ? safeStr(target2) : null;
+
+    // A. Constante
+    const allSame = exampleIndices.every(idx => safeStr(examplesMap[idx]) === sT1);
+    if (allSame) {
+        candidates.push({ type: 'static_value', value: sT1, description: `Valor Constante: "${sT1}"` });
+    }
+
+    colsToScan.forEach(col => {
+        const val1 = safeStr(row1[col]);
+        if (!val1) return;
+
+        // B. Concatenación con Índice (ITEM + 1 -> ITEM1)
+        const indexStr1 = String(idx1 + 1);
+        if (sT1 === val1 + indexStr1) {
+             if (!row2 || (sT2 === safeStr(row2[col]) + (idx2 + 1))) {
+                 candidates.push({ type: 'append_index', col, description: `[${col}] + N° Fila` });
+             }
+        }
+
+        // C. Prefijo/Sufijo Estático
+        if (sT1.endsWith(val1) && sT1.length > val1.length) {
+            const prefix = sT1.substring(0, sT1.length - val1.length);
+            if (!row2 || (sT2 === prefix + safeStr(row2[col]))) {
+                candidates.push({ type: 'static_prefix', col, prefix, description: `"${prefix}" + [${col}]` });
+            }
+        }
+        if (sT1.startsWith(val1) && sT1.length > val1.length) {
+            const suffix = sT1.substring(val1.length);
+            if (!row2 || (sT2 === safeStr(row2[col]) + suffix)) {
+                candidates.push({ type: 'static_suffix', col, suffix, description: `[${col}] + "${suffix}"` });
+            }
+        }
+
+        // D. Combinación de dos columnas (Merge)
+        // Buscamos si T empieza con Col A y termina con Col B
+        colsToScan.forEach(colB => {
+            if (col === colB) return;
+            const valB1 = safeStr(row1[colB]);
+            if (!valB1) return;
+
+            if (sT1.startsWith(val1) && sT1.endsWith(valB1)) {
+                // Lo que queda en medio es el separador
+                const sep = sT1.substring(val1.length, sT1.length - valB1.length);
+                if (!row2 || sT2 === safeStr(row2[col]) + sep + safeStr(row2[colB])) {
+                    candidates.push({ type: 'concat_cols', col1: col, col2: colB, sep, description: `[${col}] + "${sep}" + [${colB}]` });
+                }
+            }
+        });
+
+        // E. Transformaciones básicas
+        if (val1 === sT1) candidates.push({ type: 'copy', col, description: `Copia de [${col}]` });
+        if (val1.toUpperCase() === sT1) candidates.push({ type: 'upper', col, description: `Mayúsculas de [${col}]` });
+        if (val1.toLowerCase() === sT1) candidates.push({ type: 'lower', col, description: `Minúsculas de [${col}]` });
+    });
+
+    // --- SELECCIÓN DEL MEJOR CANDIDATO ---
+    // Buscamos la primera regla que cumpla TODOS los ejemplos dados por el usuario
     const validRule = candidates.find(rule => {
         return exampleIndices.every(idx => {
             const row = sourceData[idx];
-            const target = examplesMap[idx];
+            const target = examplesMap[idx]; 
             if (!row) return false;
-            return applyRuleToRow(row, rule) === target;
+            
+            let prediction = applyRuleToRow(row, rule, idx);
+            // Normalización para comparación
+            if (typeof prediction === 'number' && typeof target === 'string') prediction = String(prediction);
+            if (typeof target === 'number' && typeof prediction === 'string') prediction = parseFloat(prediction);
+
+            return prediction == target; 
         });
     });
 
-    return validRule;
+    return validRule || null;
   };
 
-  const applyRuleToRow = (row, rule) => {
-      if (!rule) return '';
-      try {
-          const val = safeStr(row[rule.col]);
-          if (rule.type === 'copy') return val;
-          if (rule.type === 'upper') return val.toUpperCase();
-          if (rule.type === 'lower') return val.toLowerCase();
-          if (rule.type === 'trim') return val.trim();
-          if (rule.type === 'substring_start') return val.substring(0, rule.len);
-          if (rule.type === 'substring_end') return val.slice(-rule.len);
-          if (rule.type === 'extract_between') {
-              let startIdx = 0;
-              if (rule.startDelim) {
-                  const sIdx = val.indexOf(rule.startDelim);
-                  if (sIdx !== -1) startIdx = sIdx + 1; else return '';
-              }
-              let sub = val.substring(startIdx);
-              if (rule.endDelim) {
-                  const eIdx = sub.indexOf(rule.endDelim);
-                  if (eIdx !== -1) sub = sub.substring(0, eIdx);
-              }
-              return sub;
-          }
-      } catch { return ''; }
-      return '';
-  };
-
-  const generateColumnFromExamples = (newColName, examplesMap) => {
+  // --- UI WRAPPERS (Passthrough) ---
+  const promoteHeaders = () => { if (data.length < 1) return; const newHeaders = columns.map(c => safeStr(data[0][c]).trim() || c); const newData = data.slice(1).map(r => { const nr = {}; columns.forEach((old, i) => nr[newHeaders[i]] = r[old]); return nr; }); updateDataState(newData, newHeaders); logAction({ type: 'PROMOTE_HEADER', description: 'Promover encabezados' }); };
+  const applyFilter = (col, condition, val) => { const action = { type: 'FILTER', col, condition, val }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Filtro ${col} ${condition} ${val}` }); };
+  const smartClean = () => { const action = { type: 'SMART_CLEAN' }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: 'Smart Clean' }); };
+  const dropColumn = (col) => { const action = { type: 'DROP_COLUMN', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Eliminar ${col}` }); };
+  const renameColumn = (col, newVal) => { const action = { type: 'RENAME', col, newVal }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Renombrar ${col} -> ${newVal}` }); };
+  const trimText = (col) => { const action = { type: 'TRIM', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Trim ${col}` }); };
+  const fillDown = (col) => { const action = { type: 'FILL_DOWN', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Fill Down ${col}` }); };
+  const cleanSymbols = (col) => { const action = { type: 'CLEAN_SYMBOLS', col }; const newData = data.map(r => ({...r, [col]: safeStr(r[col]).replace(/[^a-zA-Z0-9\s]/g, '') })); updateDataState(newData, columns); logAction({ ...action, description: `Limpiar símbolos ${col}` }); };
+  const removeDuplicates = () => { const action = { type: 'DROP_DUPLICATES' }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: 'Eliminar duplicados' }); };
+  const changeType = (col, to) => { const action = { type: 'CHANGE_TYPE', col, to }; const newData = data.map(r => { let v = r[col]; if (to === 'numeric') v = safeNum(v); else if (to === 'string') v = safeStr(v); else if (to === 'date') { const d = new Date(v); v = isValidDate(d) ? d.toISOString().split('T')[0] : null; } return { ...r, [col]: v }; }); updateDataState(newData, columns); logAction({ ...action, description: `Cambiar tipo ${col} a ${to}` }); };
+  const addIndexColumn = () => { const action = { type: 'ADD_INDEX' }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: 'Agregar Índice' }); };
+  const fillNullsVar = (col, val) => { const action = { type: 'FILL_NULLS', col, val }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Rellenar ${col}` }); };
+  const imputeNulls = (col, method) => logAction({ type: 'IMPUTE', col, method, description: `Imputar ${method}` }); 
+  const replaceValues = (col, find, replace) => logAction({ type: 'REPLACE', col, find, replace });
+  const splitColumn = (col, delim) => { const action = { type: 'SPLIT', col, delim }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Dividir ${col}` }); };
+  const mergeColumns = (col1, col2, sep) => { const action = { type: 'MERGE_COLS', col1, col2, sep }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Unir ${col1}+${col2}` }); };
+  const addAffix = (col, text, affixType) => { const action = { type: 'ADD_AFFIX', col, text, affixType }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Agregar ${affixType}` }); };
+  const textSubstring = (col, start, len) => { const action = { type: 'SUBSTR', col, start: parseInt(start), len: parseInt(len) }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Substr ${col}` }); };
+  const applyRegexExtract = (col, pattern) => { const action = { type: 'REGEX', col, pattern }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Regex ${col}` }); };
+  const applyMath = (col1, col2, op, target) => { const action = { type: 'CALC_MATH', col1, col2, op, target }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Calc ${target}` }); };
+  const addDaysToDate = (col, days) => { const action = { type: 'ADD_DAYS', col, days }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Sumar dias ${col}` }); };
+  const extractDatePart = (col, part) => { const action = { type: 'DATE_PART', col, part }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Extraer ${part}` }); };
+  const maskData = (col, chars) => logAction({ type: 'MASK', col, chars });
+  const applyPadStart = (col, len, char) => logAction({ type: 'PAD', col, len, char });
+  const extractJson = (col, key) => logAction({ type: 'JSON', col, key });
+  const clipValues = (col, min, max) => logAction({ type: 'CLIP', col, min, max });
+  const applyRound = (col, dec) => logAction({ type: 'ROUND', col, dec });
+  const applyGroup = (col, agg, op) => logAction({ type: 'GROUP', col, agg, op });
+  const handleCase = (col, mode) => { const action = { type: 'CASE_CHANGE', col, mode }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Case ${mode}` }); };
+  const duplicateColumn = (col) => logAction({ type: 'DUP_COL', col });
+  const reorderColumns = (from, to) => { const newOrder = [...columns]; const [moved] = newOrder.splice(from, 1); newOrder.splice(to, 0, moved); const action = { type: 'REORDER_COLS', newOrder }; updateDataState(data, newOrder); logAction(action); };
+  const removeTopRows = (n) => { const action = { type: 'DROP_TOP_ROWS', count: n }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction(action); };
+  const addCustomColumn = (name, formula) => logAction({ type: 'CUSTOM', name, formula });
+  const addConditionalColumn = (name, rules, def) => logAction({ type: 'COND', name });
+  const applyZScore = (col) => logAction({ type: 'ZSCORE', col });
+  const applyMinMax = (col) => logAction({ type: 'MINMAX', col });
+  const applyOneHotEncoding = (col) => logAction({ type: 'ONEHOT', col });
+  const sortData = (col, dir) => { const sorted = [...data].sort((a,b) => a[col] > b[col] ? (dir==='asc'?1:-1) : (dir==='asc'?-1:1)); updateDataState(sorted, columns); logAction({ type: 'SORT', col, dir }); };
+  
+  const generateColumnFromExamples = (newColName, examplesMap) => { 
       const rule = inferTransformation(data, examplesMap); 
-      if (!rule) {
-          showToast('No se pudo confirmar el patrón.', 'error');
-          return;
-      }
-      const newData = data.map(row => ({ ...row, [newColName]: applyRuleToRow(row, rule) }));
-      setData(newData);
-      setColumns([...columns, newColName]);
-      
-      // ¡IMPORTANTE! Guardamos la regla completa para exportarla a Python
-      logAction({ type: 'FROM_EXAMPLES', newCol: newColName, rule: rule, description: `Columna Inteligente: ${newColName} (${rule.type})` });
-      showToast('Columna inteligente creada', 'success');
-  };
-
-  // --- ACCIONES ESTRUCTURALES ---
-  const reorderColumns = (fromIndex, toIndex) => {
-    if (fromIndex === toIndex) return;
-    const newCols = [...columns];
-    const [movedCol] = newCols.splice(fromIndex, 1);
-    newCols.splice(toIndex, 0, movedCol);
-    setColumns(newCols);
-    // Guardamos el nuevo orden completo para Python
-    logAction({ type: 'REORDER_COLS', newOrder: newCols, description: `Mover columna '${movedCol}'` });
-  };
-
-  const moveColumn = (col, direction) => {
-    const idx = columns.indexOf(col);
-    if (idx < 0) return;
-    const targetIdx = direction === 'left' ? idx - 1 : idx + 1;
-    if (targetIdx >= 0 && targetIdx < columns.length) reorderColumns(idx, targetIdx);
-  };
-
-  const duplicateColumn = (col) => {
-    if (!col) return;
-    let newName = `${col}_Copy`;
-    let i = 1;
-    while(columns.includes(newName)) { newName = `${col}_Copy${i}`; i++; }
-    const newColumns = [...columns];
-    const idx = columns.indexOf(col);
-    newColumns.splice(idx + 1, 0, newName);
-    const newData = data.map(row => ({ ...row, [newName]: row[col] }));
-    setData(newData);
-    setColumns(newColumns);
-    logAction({ type: 'DUPLICATE', col, newCol: newName, description: `Duplicar ${col} -> ${newName}` });
-    showToast(`Columna duplicada como ${newName}`, 'success');
-  };
-
-  const dropColumn = (col) => {
-    if (!col) return;
-    const newData = data.map(row => { const newRow = { ...row }; delete newRow[col]; return newRow; });
-    setColumns(columns.filter(c => c !== col));
-    setData(newData);
-    logAction({ type: 'DROP_COLUMN', col, description: `Eliminar columna ${col}` });
-  };
-
-  const renameColumn = (oldName, newName) => {
-    if (!oldName || !newName) return;
-    const newData = data.map(r => { const newRow = { ...r }; newRow[newName] = newRow[oldName]; delete newRow[oldName]; return newRow; });
-    setColumns(columns.map(c => c === oldName ? newName : c));
-    setData(newData);
-    logAction({ type: 'RENAME', col: oldName, newVal: newName, description: `Renombrar ${oldName} a ${newName}` });
-  };
-
-  const changeType = (col, targetType) => {
-    if (!col) return;
-    const newData = data.map(r => {
-        let v = r[col];
-        if (targetType === 'numeric') v = safeNum(v);
-        else if (targetType === 'string') v = safeStr(v);
-        else if (targetType === 'date') { const d = new Date(v); v = isValidDate(d) ? d.toISOString().split('T')[0] : null; }
-        return { ...r, [col]: v };
-    });
-    setData(newData);
-    logAction({ type: 'CHANGE_TYPE', col, to: targetType, description: `Cambiar tipo de ${col} a ${targetType}` });
-  };
-
-  // --- LIMPIEZA Y FILTROS ---
-  const applyFilter = (col, condition, value) => {
-    const newData = data.filter(row => {
-      const cellVal = row[col];
-      const isNum = ['>', '<', '=', '>=', '<='].includes(condition);
-      if (isNum) {
-        const nCell = parseFloat(cellVal);
-        const nSearch = parseFloat(value);
-        if (isNaN(nCell) || isNaN(nSearch)) return false; 
-        if (condition === '=') return nCell === nSearch;
-        if (condition === '>') return nCell > nSearch;
-        if (condition === '<') return nCell < nSearch;
-      } else {
-        const sCell = safeStr(cellVal).toLowerCase();
-        const sSearch = safeStr(value).toLowerCase();
-        if (condition === 'contains') return sCell.includes(sSearch);
-        if (condition === 'equals') return sCell === sSearch;
-        if (condition === 'starts_with') return sCell.startsWith(sSearch);
-        if (condition === 'empty') return sCell === '';
-      }
-      return true;
-    });
-    setData(newData);
-    logAction({ type: 'FILTER', col, condition, val: value, description: `Filtrar ${col} (${condition} ${value})` });
-  };
-
-  const smartClean = () => {
-    let newData = data.map(row => {
-      const newRow = { ...row };
-      Object.keys(newRow).forEach(key => {
-        let val = newRow[key];
-        if (typeof val === 'string') { 
-            val = val.trim(); 
-            if (['null', 'nan', ''].includes(val.toLowerCase())) val = null; 
-        }
-        newRow[key] = val;
-      });
-      return newRow;
-    });
-    // Eliminar filas vacías
-    newData = newData.filter(row => Object.values(row).some(v => v !== null && v !== ''));
-    // Eliminar duplicados
-    const uniqueData = Array.from(new Set(newData.map(r => JSON.stringify(r)))).map(s => JSON.parse(s));
-    
-    setData(uniqueData);
-    logAction({ type: 'SMART_CLEAN', description: 'Smart Clean (Trim, DropNa, Dedup)' });
-    showToast('Limpieza completada', 'success');
-  };
-
-  // --- TEXTO Y TRANSFORMACIONES ---
-  const splitColumn = (col, delim) => {
-    if (!col) return;
-    const c1 = `${col}_1`;
-    const c2 = `${col}_2`;
-    setData(data.map(r => { const p = safeStr(r[col]).split(delim); return { ...r, [c1]: p[0] || '', [c2]: p.slice(1).join(delim) || '' }; }));
-    setColumns([...columns, c1, c2]);
-    // GUARDAMOS DELIM PARA PYTHON
-    logAction({ type: 'SPLIT', col, delim, description: `Dividir ${col} por '${delim}'` });
-  };
-
-  const mergeColumns = (col1, col2, sep) => {
-    if (!col1 || !col2) return;
-    const nc = `${col1}_${col2}`;
-    setData(data.map(r => ({ ...r, [nc]: `${safeStr(r[col1])}${sep}${safeStr(r[col2])}` })));
-    setColumns([...columns, nc]);
-    logAction({ type: 'MERGE_COLS', col1, col2, sep, description: `Unir ${col1} + ${col2}` });
-  };
-
-  const replaceValues = (col, find, replace) => {
-    if (!col) return;
-    setData(data.map(r => ({ ...r, [col]: safeStr(r[col]).replaceAll(find, replace) })));
-    logAction({ type: 'REPLACE', col, find, replace, description: `Reemplazar '${find}' por '${replace}'` });
-  };
-
-  const extractJson = (col, key) => {
-    if (!col) return;
-    const nc = `${col}_${key}`;
-    setData(data.map(r => { 
-        try { 
-            const val = r[col]; 
-            const o = (typeof val === 'string' && val.startsWith('{')) ? JSON.parse(val) : val; 
-            return { ...r, [nc]: o?.[key] || '' }; 
-        } catch { return { ...r, [nc]: '' }; } 
-    }));
-    setColumns([...columns, nc]);
-    logAction({ type: 'JSON_EXTRACT', col, key, description: `Extraer JSON Key: ${key}` });
-  };
-
-  const applyMath = (col1, col2, op, targetName) => {
-    if (!col1 || !col2) return;
-    setData(data.map(r => { 
-        const v1 = safeNum(r[col1]); 
-        const v2 = safeNum(r[col2]); 
-        let res = null; 
-        if (!isNaN(v1) && !isNaN(v2)) { 
-            if (op === '+') res = v1 + v2; 
-            if (op === '-') res = v1 - v2; 
-            if (op === '*') res = v1 * v2; 
-            if (op === '/') res = v2 !== 0 ? v1 / v2 : 0; 
-        } 
-        return { ...r, [targetName]: res }; 
-    }));
-    if (!columns.includes(targetName)) setColumns([...columns, targetName]);
-    logAction({ type: 'CALC_MATH', col1, col2, op, target: targetName, description: `Calc: ${targetName} = ${col1} ${op} ${col2}` });
-  };
-
-  const addAffix = (col, text, type) => {
-      if(!col) return;
-      setData(data.map(r => ({ ...r, [col]: type === 'prefix' ? `${text}${safeStr(r[col])}` : `${safeStr(r[col])}${text}` })));
-      logAction({ type: 'AFFIX', col, text, affixType: type, description: `Agregar ${type} '${text}'` });
-  };
-
-  const textSubstring = (col, start, len) => {
-      const s = parseInt(start)||0; const l = parseInt(len)||5;
-      const nc = `${col}_sub`;
-      setData(data.map(r => ({...r, [nc]: safeStr(r[col]).substr(s, l)})));
-      setColumns([...columns, nc]);
-      logAction({ type: 'SUBSTR', col, start: s, len: l, description: `Extraer chars ${s}-${s+l}` });
-  };
-
-  const applyRegexExtract = (col, pattern) => {
-      try {
-          const re = new RegExp(pattern);
-          const nc = `${col}_regex`;
-          setData(data.map(r => { const m = safeStr(r[col]).match(re); return {...r, [nc]: m ? m[0] : ''} }));
-          setColumns([...columns, nc]);
-          logAction({ type: 'REGEX_EXTRACT', col, pattern, description: `Regex Extract: ${pattern}` });
-      } catch { showToast('Regex inválida', 'error'); }
-  };
-
-  const addDaysToDate = (col, days) => {
-      const d = parseInt(days)||0;
-      setData(data.map(r => {
-          const dt = new Date(r[col]);
-          if(isValidDate(dt)) { dt.setDate(dt.getDate() + d); return {...r, [col]: dt.toISOString().split('T')[0]}; }
-          return r;
-      }));
-      logAction({ type: 'ADD_DAYS', col, days: d, description: `Sumar ${d} días a ${col}` });
-  };
-
-  const extractDatePart = (col, part) => {
-      const nc = `${col}_${part}`;
-      setData(data.map(r => {
-          const d = new Date(r[col]);
-          let res = null;
-          if(isValidDate(d)) {
-              if(part === 'year') res = d.getFullYear();
-              if(part === 'month') res = d.getMonth() + 1;
-              if(part === 'day') res = d.getDate();
-          }
-          return {...r, [nc]: res};
-      }));
-      setColumns([...columns, nc]);
-      logAction({ type: 'DATE_PART', col, part, description: `Extraer ${part} de ${col}` });
-  };
-
-  // --- STANDARD HELPERS QUE YA ESTABAN ---
-  const promoteHeaders = () => {
-    if (data.length < 1) return;
-    const newHeaders = columns.map(c => safeStr(data[0][c]).trim() || c);
-    setColumns(newHeaders);
-    setData(data.slice(1).map(r => { const nr = {}; columns.forEach((old, i) => nr[newHeaders[i]] = r[old]); return nr; }));
-    logAction({ type: 'PROMOTE_HEADER', description: 'Promover encabezados' });
-  };
-
-  const removeTopRows = (count) => {
-      setData(data.slice(count));
-      logAction({ type: 'DROP_TOP_ROWS', count, description: `Borrar ${count} filas sup.` });
-  };
-
-  const addIndexColumn = () => {
-      setColumns(['ID', ...columns]);
-      setData(data.map((r, i) => ({ 'ID': i+1, ...r })));
-      logAction({ type: 'ADD_INDEX', description: 'Agregar Índice' });
-  };
-
-  const fillDown = (col) => {
-      let last = null;
-      const newData = data.map(r => { const v = r[col]; if(v!==null && v!=='') last = v; return {...r, [col]: last}; });
-      setData(newData);
-      logAction({ type: 'FILL_DOWN', col, description: `Fill Down ${col}` });
-  };
-
-  const trimText = (col) => {
-      setData(data.map(r => ({...r, [col]: safeStr(r[col]).trim()})));
-      logAction({ type: 'TRIM', col, description: `Trim ${col}` });
-  };
-
-  const cleanSymbols = (col) => {
-      setData(data.map(r => ({...r, [col]: safeStr(r[col]).replace(/[^a-zA-Z0-9\s]/g, '') })));
-      logAction({ type: 'CLEAN_SYMBOLS', col, description: `Limpiar símbolos en ${col}` });
-  };
-
-  const handleCase = (col, mode) => {
-      const newData = data.map(r => {
-          const val = safeStr(r[col]);
-          let nv = val;
-          if(mode==='upper') nv = val.toUpperCase();
-          if(mode==='lower') nv = val.toLowerCase();
-          if(mode==='title') nv = val.toLowerCase().replace(/(?:^|\s)\S/g, a => a.toUpperCase());
-          return {...r, [col]: nv};
-      });
-      setData(newData);
-      logAction({ type: 'CASE_CHANGE', col, mode, description: `Texto a ${mode}` });
-  };
-
-  const imputeNulls = (col, method) => {
-      // Lógica simplificada de imputación
-      const vals = data.map(r => safeNum(r[col])).filter(n => !isNaN(n));
-      if (!vals.length) return;
-      let rep = 0;
-      if (method === 'mean') rep = vals.reduce((a, b) => a + b, 0) / vals.length;
-      if (method === 'median') { vals.sort((a,b)=>a-b); rep = vals[Math.floor(vals.length/2)]; }
-      
-      setData(data.map(r => ({...r, [col]: (r[col]===null || r[col]==='') ? Number(rep.toFixed(2)) : r[col]})));
-      logAction({ type: 'IMPUTE', col, method, description: `Imputar ${col} con ${method}` });
-  };
-
-  const fillNullsVar = (col, val) => {
-      setData(data.map(r => ({...r, [col]: (r[col]===null || r[col]==='') ? val : r[col]})));
-      logAction({ type: 'FILL_NULLS', col, val, description: `Rellenar nulos en ${col}` });
-  };
-
-  const addCustomColumn = (newCol, formula) => {
-      // Nota: JS Eval. En Python esto requerirá conversión manual
-      try {
-          const func = new Function('row', `try { with(row) { return ${formula} } } catch { return null; }`);
-          const newData = data.map(r => ({ ...r, [newCol]: func(r) }));
-          setData(newData);
-          setColumns([...columns, newCol]);
-          logAction({ type: 'ADD_CUSTOM', newCol, formula, description: `Columna Custom: ${newCol}` });
-      } catch (e) { showToast('Error fórmula', 'error'); }
-  };
-  
-  const addConditionalColumn = (newColName, rules, elseValue) => {
-      // Lógica de aplicación similar a la original...
-      const newData = data.map(row => {
-          let res = elseValue;
-          for(const rule of rules) {
-               const val = row[rule.col];
-               // ... (lógica de evaluación omitida por brevedad, es igual a la original)
-               if(val == rule.val) { res = rule.output; break; } // Simplificado
-          }
-          return { ...row, [newColName]: res };
-      });
-      setData(newData);
-      setColumns([...columns, newColName]);
-      logAction({ type: 'ADD_CONDITIONAL', newCol: newColName, rules, elseValue, description: `Columna Condicional: ${newColName}` });
-  };
-
-  // Z-Score, MinMax, etc.
-  const applyZScore = (col) => {
-      // Cálculo real omitido por brevedad (ya estaba bien), lo importante es el logAction
-      logAction({ type: 'Z-SCORE', col, description: `Z-Score en ${col}` });
-  };
-  const applyMinMax = (col) => {
-      logAction({ type: 'MIN-MAX', col, description: `Normalizar ${col}` });
-  };
-  const applyOneHotEncoding = (col) => {
-      logAction({ type: 'ONE-HOT', col, description: `One-Hot ${col}` });
-  };
-
-  // Funciones placeholder para completar el hook
-  const removeDuplicates = () => {
-    /* Lógica real aquí */
-    logAction({ type: 'DROP_DUPLICATES', description: 'Eliminar duplicados' });
-  };
-  
-  const sortData = (col, dir) => {
-      /* Lógica real aquí */
-      logAction({ type: 'SORT', col, dir, description: `Ordenar ${col} ${dir}` });
+      if (!rule) { showToast('No se pudo confirmar el patrón.', 'error'); return; } 
+      const newData = data.map((row, i) => ({ ...row, [newColName]: applyRuleToRow(row, rule, i) })); 
+      updateDataState(newData, [...columns, newColName]); 
+      logAction({ type: 'FROM_EXAMPLES', newCol: newColName, rule: rule, description: `Columna Inteligente: ${newColName} (${rule.description || rule.type})` }); 
   };
 
   return {
-    inferTransformation, applyRuleToRow, generateColumnFromExamples,
-    reorderColumns, moveColumn, duplicateColumn, dropColumn, renameColumn, changeType,
-    applyFilter, smartClean, splitColumn, mergeColumns, replaceValues, extractJson,
-    applyMath, addAffix, textSubstring, applyRegexExtract, addDaysToDate, extractDatePart,
-    promoteHeaders, removeTopRows, addIndexColumn, fillDown, trimText, cleanSymbols,
-    handleCase, imputeNulls, fillNullsVar, addCustomColumn, addConditionalColumn,
-    applyZScore, applyMinMax, applyOneHotEncoding, removeDuplicates, sortData
+    deleteActionFromHistory,
+    applyBatchTransform,
+    promoteHeaders, smartClean, applyFilter, dropColumn, renameColumn, trimText, fillDown,
+    removeDuplicates, changeType, addIndexColumn, fillNullsVar, imputeNulls, replaceValues, splitColumn, mergeColumns,
+    addAffix, textSubstring, applyRegexExtract, maskData, applyPadStart, extractJson, addDaysToDate, extractDatePart, applyMath, clipValues,
+    applyRound, applyGroup, handleCase, duplicateColumn, reorderColumns, removeTopRows, addCustomColumn, addConditionalColumn, applyZScore,
+    applyMinMax, applyOneHotEncoding, sortData, inferTransformation, applyRuleToRow, generateColumnFromExamples
   };
 }
