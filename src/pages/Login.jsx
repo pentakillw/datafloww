@@ -23,10 +23,17 @@ export default function Login() {
           throw new Error("Debes aceptar los Términos y Condiciones para crear tu cuenta.");
         }
 
+        // --- CAMBIO IMPORTANTE AQUÍ ---
+        // Usamos window.location.origin para detectar automáticamente si estamos en
+        // localhost o en producción (nocodepy.com) y redirigir correctamente.
         const { error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            emailRedirectTo: window.location.origin, 
+          },
         });
+        
         if (error) throw error;
         alert('¡Registro exitoso! Revisa tu correo para confirmar tu cuenta.');
         setIsSignUp(false); 
