@@ -14,9 +14,10 @@ import ExportHub from './pages/ExportHub';
 import DocsPage from './pages/DocsPage';
 import InstallGuide from './pages/InstallGuide';
 
-// --- NUEVAS PÁGINAS LEGALES ---
+// --- NUEVAS PÁGINAS LEGALES Y FACTURACIÓN ---
 import TermsPage from './pages/TermsPage';
 import PrivacyPage from './pages/PrivacyPage';
+import BillingPage from './pages/BillingPage'; // <--- AGREGAR ESTA LÍNEA
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -61,6 +62,7 @@ export default function App() {
           <Route path="/export" element={<ExportHub />} />
           <Route path="/docs" element={<DocsPage />} />
           <Route path="/guide" element={<InstallGuide />} />
+          <Route path="/billing" element={<BillingPage />} /> {/* <--- AGREGAR RUTA DE FACTURACIÓN */}
         </Route>
 
         {/* Fallback */}

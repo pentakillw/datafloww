@@ -9,7 +9,8 @@ import { useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { data, actions, userTier, planLimits, filesUploadedCount, simulateUpgrade } = useData();
+  // Usamos redirectToBilling
+  const { data, actions, userTier, planLimits, filesUploadedCount, redirectToBilling } = useData();
   const totalRows = data.length;
 
   // Calculamos porcentaje de uso del plan
@@ -31,7 +32,7 @@ export default function Dashboard() {
              <div>
                <div className="flex items-center gap-3 mb-2">
                  <h1 className="text-3xl font-black text-white tracking-tight">Hola, Analista</h1>
-                 {userTier === 'pro' && <span className="bg-yellow-400 text-black text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1"><Crown size={10} fill="currentColor"/> PRO</span>}
+                 {userTier === 'pro' && <span className="bg-yellow-400/90 text-black text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1"><Crown size={10} fill="currentColor"/> PRO</span>}
                  {userTier === 'free' && <span className="bg-gray-200/20 text-white text-xs font-bold px-2 py-0.5 rounded-full border border-white/20">FREE</span>}
                </div>
                <p className="text-teal-100 text-lg max-w-xl leading-relaxed">
@@ -56,7 +57,7 @@ export default function Dashboard() {
                 
                 {userTier === 'free' && (
                   <button 
-                    onClick={simulateUpgrade}
+                    onClick={redirectToBilling}
                     className="w-full bg-white text-persian hover:bg-gray-100 text-xs font-bold py-2 rounded-lg transition-colors shadow-sm flex items-center justify-center gap-1"
                   >
                     <Sparkles size={12} /> Actualizar a PRO
@@ -161,7 +162,7 @@ function ActionCard({ icon, title, desc, onClick, color, active, disabled }) {
     <button onClick={onClick} disabled={disabled} className={`group text-left relative p-6 rounded-2xl border transition-all ${disabled ? 'opacity-50 cursor-not-allowed bg-gray-50 dark:bg-carbon border-gray-200 dark:border-wolf/10' : 'bg-white dark:bg-carbon-light border-gray-200 dark:border-wolf/20 hover:border-transparent hover:shadow-xl hover:-translate-y-1 cursor-pointer'}`}>
        {active && <div className="absolute top-4 right-4"><span className="relative flex h-3 w-3"><span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-${color}`}></span><span className={`relative inline-flex rounded-full h-3 w-3 bg-${color}`}></span></span></div>}
        <div className={`p-4 rounded-xl inline-block mb-4 shadow-sm transition-shadow ${disabled ? 'bg-gray-200 dark:bg-wolf/10 text-gray-400' : colorClasses[color]}`}>{icon}</div>
-       <h3 className={`text-lg font-bold mb-2 ${disabled ? 'text-gray-500 dark:text-wolf' : 'text-gray-900 dark:text-zinc'}`}>{title}</h3>
+       <h3 className="text-lg font-bold mb-2 text-gray-900 dark:text-zinc">{title}</h3>
        <p className={`text-sm leading-relaxed mb-4 ${disabled ? 'text-gray-400 dark:text-wolf/60' : 'text-gray-600 dark:text-wolf'}`}>{desc}</p>
        <div className={`flex items-center gap-2 text-sm font-bold transition-colors ${disabled ? 'text-gray-400' : `${textColors[color]} group-hover:underline`}`}>{disabled ? 'Espera...' : 'Abrir'} <ChevronRight size={16} className={disabled ? '' : 'group-hover:translate-x-1 transition-transform'} /></div>
     </button>
