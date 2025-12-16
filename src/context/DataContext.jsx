@@ -27,55 +27,94 @@ export function DataProvider({ children }) {
   const [userEmail, setUserEmail] = useState('');
   
   const [cloudFiles, setCloudFiles] = useState([]); 
+  const [isLoadingFiles, setIsLoadingFiles] = useState(true);
+  const [toasts, setToasts] = useState([]);
   const [deletedFileIds, setDeletedFileIds] = useState(() => {
       const stored = localStorage.getItem('nocodepy_trash');
       return stored ? JSON.parse(stored) : [];
   }); // Papelera local
   
-  // --- GESTIÓN DE PROYECTOS (LOCAL MOCK) ---
-  const [projects, setProjects] = useState(() => {
-      const stored = localStorage.getItem('nocodepy_projects');
-      return stored ? JSON.parse(stored) : [];
-  });
-  const [fileProjectMap, setFileProjectMap] = useState(() => {
-      const stored = localStorage.getItem('nocodepy_file_project_map');
-      return stored ? JSON.parse(stored) : {};
-  });
+  // --- GESTIÓN DE PROYECTOS (LOCAL MOCK -> SUPABASE) ---
+  const [projects, setProjects] = useState([]);
 
-  const [isLoadingFiles, setIsLoadingFiles] = useState(true);
-  const [toasts, setToasts] = useState([]);
+  // Cargar proyectos desde Supabase al inicio
+  useEffect(() => {
+    let mounted = true;
+    const fetchProjects = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && mounted) {
+        const { data: userProjects } = await supabase
+          .from('projects')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+        
+        if (userProjects) {
+          setProjects(userProjects);
+        }
+      }
+    };
+    fetchProjects();
+    return () => { mounted = false; };
+  }, []);
 
-  // --- 1. INICIALIZACIÓN ---
-  const refreshCloudFiles = async (userId) => {
-    const uid = userId || (await supabase.auth.getUser()).data.user?.id;
-    if (!uid) return;
-    const { data: files } = await supabase.from('user_files').select('*').eq('user_id', uid).order('created_at', { ascending: false });
-    if (files) {
-      // Enriquecer con Project ID
-      const filesWithProjects = files.map(f => ({
-          ...f,
-          projectId: fileProjectMap[f.id] || null
-      }));
-      setCloudFiles(filesWithProjects);
-      setIsLoadingFiles(false);
-    }
+  const createProject = async (projectData) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: newProject, error } = await supabase.from('projects').insert({
+          user_id: user.id,
+          name: projectData.name,
+          description: projectData.description
+      }).select().single();
+
+      if (error) {
+          showToast('Error al crear proyecto: ' + error.message, 'error');
+          return;
+      }
+
+      setProjects(prev => [newProject, ...prev]);
+      showToast('Proyecto creado exitosamente.', 'success');
+      logSystemEvent('PROJECT_CREATE', { id: newProject.id, name: newProject.name });
   };
 
-  // Persistencia de Proyectos
-  useEffect(() => {
-      localStorage.setItem('nocodepy_projects', JSON.stringify(projects));
-  }, [projects]);
+  const deleteProject = async (projectId) => {
+      const { error } = await supabase.from('projects').delete().eq('id', projectId);
+      
+      if (error) {
+          showToast('Error al eliminar proyecto: ' + error.message, 'error');
+          return;
+      }
 
-  useEffect(() => {
-      localStorage.setItem('nocodepy_file_project_map', JSON.stringify(fileProjectMap));
-      // Actualizar cloudFiles en caliente si cambia el mapa
-      setCloudFiles(prev => prev.map(f => ({ ...f, projectId: fileProjectMap[f.id] || null })));
-  }, [fileProjectMap]);
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+      
+      // En Supabase, si configuramos ON DELETE SET NULL, los archivos se desvinculan solos.
+      // Pero actualizamos el estado local para reflejarlo inmediatamente
+      setCloudFiles(prev => prev.map(f => 
+          f.project_id === projectId ? { ...f, project_id: null, projectId: null } : f
+      ));
 
-  // Guardar Papelera local
-  useEffect(() => {
-      localStorage.setItem('nocodepy_trash', JSON.stringify(deletedFileIds));
-  }, [deletedFileIds]);
+      showToast('Proyecto eliminado.', 'info');
+      logSystemEvent('PROJECT_DELETE', { id: projectId });
+  };
+
+  const assignFileToProject = async (fileId, projectId) => {
+      const { error } = await supabase.from('user_files')
+          .update({ project_id: projectId })
+          .eq('id', fileId);
+
+      if (error) {
+          showToast('Error al mover archivo: ' + error.message, 'error');
+          return;
+      }
+
+      // Actualizar estado local
+      setCloudFiles(prev => prev.map(f => 
+          f.id === fileId ? { ...f, project_id: projectId, projectId: projectId } : f
+      ));
+      
+      showToast('Archivo movido al proyecto.', 'success');
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -114,6 +153,25 @@ export function DataProvider({ children }) {
   }, []);
 
 
+
+  // --- 1. INICIALIZACIÓN ---
+  const refreshCloudFiles = async (userId) => {
+    const uid = userId || (await supabase.auth.getUser()).data.user?.id;
+    if (!uid) return;
+    
+    // Ahora obtenemos el campo project_id directamente de la base de datos
+    const { data: files } = await supabase.from('user_files').select('*').eq('user_id', uid).order('created_at', { ascending: false });
+    
+    if (files) {
+      // Mapeamos para mantener compatibilidad con el frontend que usa 'projectId'
+      const filesWithProjects = files.map(f => ({
+          ...f,
+          projectId: f.project_id // Asumimos que la columna en BD se llama project_id
+      }));
+      setCloudFiles(filesWithProjects);
+      setIsLoadingFiles(false);
+    }
+  };
 
   // --- 2. TOASTS (Con UUID) ---
   const showToast = useCallback((message, type = 'success') => {
@@ -353,40 +411,10 @@ export function DataProvider({ children }) {
   const totalFilesUsage = cloudFiles.length; 
   const canUploadNew = totalFilesUsage < PLAN_LIMITS[userTier].maxFiles;
 
-  // --- GESTIÓN DE PROYECTOS ---
-  const createProject = (projectData) => {
-      const newProject = {
-          id: crypto.randomUUID(),
-          createdAt: new Date().toISOString(),
-          filesCount: 0,
-          ...projectData
-      };
-      setProjects(prev => [newProject, ...prev]);
-      showToast('Proyecto creado exitosamente.', 'success');
-      logSystemEvent('PROJECT_CREATE', { id: newProject.id, name: newProject.name });
-  };
-
-  const deleteProject = (projectId) => {
-      setProjects(prev => prev.filter(p => p.id !== projectId));
-      // Desvincular archivos
-      setFileProjectMap(prev => {
-          const newMap = { ...prev };
-          Object.keys(newMap).forEach(fileId => {
-              if (newMap[fileId] === projectId) delete newMap[fileId];
-          });
-          return newMap;
-      });
-      showToast('Proyecto eliminado.', 'info');
-      logSystemEvent('PROJECT_DELETE', { id: projectId });
-  };
-
-  const assignFileToProject = (fileId, projectId) => {
-      setFileProjectMap(prev => ({
-          ...prev,
-          [fileId]: projectId
-      }));
-      showToast('Archivo movido al proyecto.', 'success');
-  };
+  // --- GESTIÓN DE PROYECTOS (LOCAL MOCK REMOVED) ---
+  /*
+  // Local functions removed to avoid conflict with Supabase implementation
+  */
 
   // --- AUTOMATIZACIÓN ---
   const checkAutomationRules = (fileMeta) => {
