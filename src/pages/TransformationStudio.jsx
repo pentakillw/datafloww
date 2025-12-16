@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 
 export default function TransformationStudio() {
-  const { data, columns, actions, undoLastAction, deleteAction, showToast } = useData();
+  const { data, columns, actions, undoLastAction, showToast } = useData();
   const transform = useDataTransform(); 
   
   const [activeCol, setActiveCol] = useState(null);
@@ -89,10 +89,11 @@ export default function TransformationStudio() {
   useEffect(() => {
     if (columns.length > 0) {
       const first = columns[0];
-      setMathCol2(prev => prev || first);
-      setMergeCol2(prev => prev || first);
-      setGroupAggCol(prev => prev || first);
+      if (!mathCol2) setMathCol2(first);
+      if (!mergeCol2) setMergeCol2(first);
+      if (!groupAggCol) setGroupAggCol(first);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columns]);
 
   // Clicks fuera

@@ -8,8 +8,9 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['"Source Code Pro"', 'monospace'],
-        mono: ['"Source Code Pro"', 'monospace'],
+        sans: ['Inter', 'sans-serif'],
+        display: ['Outfit', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
       },
       colors: {
         carbon: {
@@ -17,13 +18,12 @@ export default {
           light: '#2d2d2d',
           dark: '#1a1a1a'
         },
-        persian: {
-          DEFAULT: '#029CA3',
-          dark: '#027a80'
-        },
+        persian: '#2A9D8F',
         sea: '#07B5A7',
         wolf: '#CECECE',
         zinc: '#FDFDFD',
+        primary: '#333333', // Nuevo color de texto principal legible
+        secondary: '#4B5563', // Gris oscuro para subtítulos
       }
     },
   },

@@ -57,10 +57,11 @@ export function useDataTransform() {
           case 'DROP_DUPLICATES':
               newData = Array.from(new Set(newData.map(r => JSON.stringify(r)))).map(s => JSON.parse(s));
               break;
-          case 'FILL_DOWN':
+          case 'FILL_DOWN': {
               let last = null;
               newData = newData.map(r => { const v = r[action.col]; if(v!==null && v!=='') last = v; return {...r, [action.col]: last}; });
               break;
+          }
           case 'FILL_NULLS':
               newData = newData.map(r => ({...r, [action.col]: (r[action.col]===null || r[action.col]==='') ? action.val : r[action.col]}));
               break;
@@ -76,25 +77,28 @@ export function useDataTransform() {
                   return {...r, [action.col]: v};
               });
               break;
-          case 'SPLIT':
+          case 'SPLIT': {
               const c1 = `${action.col}_1`, c2 = `${action.col}_2`;
               newData = newData.map(r => { const p = safeStr(r[action.col]).split(action.delim); return {...r, [c1]: p[0]||'', [c2]: p.slice(1).join(action.delim)||''}; });
               if(!newCols.includes(c1)) newCols = [...newCols, c1, c2];
               break;
-          case 'MERGE_COLS':
+          }
+          case 'MERGE_COLS': {
               const nm = `${action.col1}_${action.col2}`;
               newData = newData.map(r => ({...r, [nm]: `${safeStr(r[action.col1])}${action.sep}${safeStr(r[action.col2])}` }));
               if(!newCols.includes(nm)) newCols = [...newCols, nm];
               break;
-          case 'SUBSTR':
+          }
+          case 'SUBSTR': {
              const nsub = `${action.col}_sub`;
              newData = newData.map(r => ({...r, [nsub]: safeStr(r[action.col]).substr(action.start, action.len)}));
              if(!newCols.includes(nsub)) newCols = [...newCols, nsub];
              break;
+          }
           case 'ADD_AFFIX':
               newData = newData.map(r => ({ ...r, [action.col]: action.affixType === 'prefix' ? `${action.text}${safeStr(r[action.col])}` : `${safeStr(r[action.col])}${action.text}` }));
               break;
-          case 'REGEX':
+          case 'REGEX': {
              const nreg = `${action.col}_regex`;
              try {
                 const re = new RegExp(action.pattern);
@@ -102,6 +106,7 @@ export function useDataTransform() {
                 if(!newCols.includes(nreg)) newCols = [...newCols, nreg];
              } catch { console.warn("Regex invalido en replay"); }
              break;
+          }
           case 'FILTER':
               newData = newData.filter(row => {
                   const cell = row[action.col];
@@ -130,7 +135,7 @@ export function useDataTransform() {
               });
               if(!newCols.includes(action.target)) newCols=[...newCols, action.target];
               break;
-          case 'ADD_DAYS':
+          case 'ADD_DAYS': {
               const d = parseInt(action.days)||0;
               newData = newData.map(r => {
                   const dt = new Date(r[action.col]);
@@ -138,7 +143,8 @@ export function useDataTransform() {
                   return r;
               });
               break;
-          case 'DATE_PART':
+          }
+          case 'DATE_PART': {
               const ncDate = `${action.col}_${action.part}`;
               newData = newData.map(r => {
                  const dt = new Date(r[action.col]);
@@ -151,6 +157,7 @@ export function useDataTransform() {
               });
               if(!newCols.includes(ncDate)) newCols=[...newCols, ncDate];
               break;
+          }
           case 'SORT':
               newData.sort((a,b) => a[action.col] > b[action.col] ? (action.dir==='asc'?1:-1) : (action.dir==='asc'?-1:1));
               break;
@@ -259,23 +266,57 @@ export function useDataTransform() {
               case 'lower': return val.toLowerCase();
               case 'title': return val.toLowerCase().replace(/(?:^|\s)\S/g, a=>a.toUpperCase());
               case 'trim': return val.trim();
-              case 'word_extract': 
+              case 'word_extract': {
                   const words = val.trim().split(/[\s,;]+/); 
                   return words[rule.index] || '';
+              }
+              case 'split_part': {
+                  const parts = val.split(rule.delim);
+                  return parts[rule.index] || '';
+              }
+              case 'regex_extract': {
+                  const re = new RegExp(rule.pattern);
+                  const m = val.match(re);
+                  return m ? m[0] : '';
+              }
               case 'substr_start': return val.substring(0, rule.len);
-              case 'extract_email':
+              case 'extract_email': {
                   const emailMatch = val.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
                   return emailMatch ? emailMatch[0] : '';
+              }
+              case 'extract_between': {
+                  const s = safeStr(row[rule.col]);
+                  const i1 = s.indexOf(rule.start);
+                  if (i1 === -1) return '';
+                  const i2 = s.indexOf(rule.end, i1 + rule.start.length);
+                  if (i2 === -1) return '';
+                  return s.substring(i1 + rule.start.length, i2);
+              }
+              case 'split_reorder': {
+                   const parts = safeStr(row[rule.col]).split(rule.delim);
+                   const newParts = rule.indices.map(i => parts[i] || '');
+                   return newParts.join(rule.outSep);
+              }
+              case 'date_reformat': {
+                  const d = new Date(row[rule.col]);
+                  if (!isValidDate(d)) return '';
+                  if (rule.format === 'iso') return d.toISOString().split('T')[0]; // YYYY-MM-DD
+                  if (rule.format === 'us') return `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`; // MM/DD/YYYY
+                  if (rule.format === 'eu') return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()}`; // DD/MM/YYYY
+                  if (rule.format === 'year') return String(d.getFullYear());
+                  if (rule.format === 'month_name') return d.toLocaleString('default', { month: 'long' });
+                  return d.toDateString();
+              }
               default: return '';
           }
-      } catch (e) { return ''; }
+      } catch { return ''; }
   };
 
   const inferTransformation = (sourceData, examplesMap, limitToCols = null) => {
     const exampleIndices = Object.keys(examplesMap).map(Number).sort((a,b) => a-b);
     if (exampleIndices.length === 0) return null;
 
-    // Usamos hasta 2 ejemplos para inferencia
+    // Usamos hasta 3 ejemplos para inferencia (más robusto)
     const idx1 = exampleIndices[0];
     const row1 = sourceData[idx1];
     const target1 = examplesMap[idx1]; 
@@ -289,11 +330,11 @@ export function useDataTransform() {
     const colsToScan = limitToCols || Object.keys(row1);
     const candidates = [];
 
-    // Detectar si el objetivo es numérico para priorizar matemáticas
+    // Detectar si el objetivo es numérico
     const isNumTarget = !isNaN(parseFloat(target1));
 
     // ---------------------------------------------------------
-    // 1. INFERENCIA MATEMÁTICA (Detecta Operaciones)
+    // 1. INFERENCIA MATEMÁTICA
     // ---------------------------------------------------------
     if (isNumTarget) {
         const t1 = parseFloat(target1);
@@ -302,60 +343,32 @@ export function useDataTransform() {
         colsToScan.forEach(colA => {
             const vA1 = parseFloat(row1[colA]);
             if (isNaN(vA1)) return;
-
             const vA2 = row2 ? parseFloat(row2[colA]) : null;
 
-            // A. Operaciones con Constante (Col A [op] K = Target)
-            // Suma: Col + K = T  => K = T - Col
+            // ... (Lógica matemática existente simplificada/mantenida) ...
+            // Operaciones con Constante
             const diff1 = t1 - vA1;
-            if (row2) {
-                if (Math.abs((t2 - vA2) - diff1) < 0.001) {
-                    candidates.push({ type: 'math_const_op', op: '+', col1: colA, val: diff1, description: `[${colA}] + ${diff1}` });
-                }
-            } else candidates.push({ type: 'math_const_op', op: '+', col1: colA, val: diff1, description: `[${colA}] + ${diff1}` });
-
-            // Multiplicación: Col * K = T => K = T / Col
+            if (!row2 || Math.abs((t2 - vA2) - diff1) < 0.001) {
+                 candidates.push({ type: 'math_const_op', op: '+', col1: colA, val: diff1, description: `[${colA}] + ${diff1}` });
+            }
             if (vA1 !== 0) {
                 const factor1 = t1 / vA1;
-                if (row2) {
-                    if (vA2 !== 0 && Math.abs((t2 / vA2) - factor1) < 0.001) {
-                        candidates.push({ type: 'math_const_op', op: '*', col1: colA, val: factor1, description: `[${colA}] * ${factor1.toFixed(2)}` });
-                    }
-                } else candidates.push({ type: 'math_const_op', op: '*', col1: colA, val: factor1, description: `[${colA}] * ${factor1.toFixed(2)}` });
+                if (!row2 || (vA2 !== 0 && Math.abs((t2 / vA2) - factor1) < 0.001)) {
+                     candidates.push({ type: 'math_const_op', op: '*', col1: colA, val: factor1, description: `[${colA}] * ${factor1.toFixed(2)}` });
+                }
             }
 
-            // B. Operaciones entre Dos Columnas (Col A [op] Col B = Target)
+            // Operaciones entre Columnas
             colsToScan.forEach(colB => {
                 if (colA === colB) return;
                 const vB1 = parseFloat(row1[colB]);
                 if (isNaN(vB1)) return;
-                
                 const vB2 = row2 ? parseFloat(row2[colB]) : null;
 
-                // Suma (A + B)
-                if (Math.abs((vA1 + vB1) - t1) < 0.001) {
-                    if (!row2 || Math.abs((vA2 + vB2) - t2) < 0.001) {
-                        candidates.push({ type: 'math_col_op', op: '+', col1: colA, col2: colB, description: `[${colA}] + [${colB}]` });
-                    }
-                }
-                // Resta (A - B)
-                if (Math.abs((vA1 - vB1) - t1) < 0.001) {
-                    if (!row2 || Math.abs((vA2 - vB2) - t2) < 0.001) {
-                        candidates.push({ type: 'math_col_op', op: '-', col1: colA, col2: colB, description: `[${colA}] - [${colB}]` });
-                    }
-                }
-                // Multiplicación (A * B)
-                if (Math.abs((vA1 * vB1) - t1) < 0.001) {
-                    if (!row2 || Math.abs((vA2 * vB2) - t2) < 0.001) {
-                        candidates.push({ type: 'math_col_op', op: '*', col1: colA, col2: colB, description: `[${colA}] * [${colB}]` });
-                    }
-                }
-                // División (A / B)
-                if (vB1 !== 0 && Math.abs((vA1 / vB1) - t1) < 0.001) {
-                    if (!row2 || (vB2 !== 0 && Math.abs((vA2 / vB2) - t2) < 0.001)) {
-                        candidates.push({ type: 'math_col_op', op: '/', col1: colA, col2: colB, description: `[${colA}] / [${colB}]` });
-                    }
-                }
+                if (Math.abs((vA1 + vB1) - t1) < 0.001 && (!row2 || Math.abs((vA2 + vB2) - t2) < 0.001))
+                    candidates.push({ type: 'math_col_op', op: '+', col1: colA, col2: colB, description: `[${colA}] + [${colB}]` });
+                if (Math.abs((vA1 * vB1) - t1) < 0.001 && (!row2 || Math.abs((vA2 * vB2) - t2) < 0.001))
+                    candidates.push({ type: 'math_col_op', op: '*', col1: colA, col2: colB, description: `[${colA}] * [${colB}]` });
             });
         });
     }
@@ -368,56 +381,153 @@ export function useDataTransform() {
 
     // A. Constante
     const allSame = exampleIndices.every(idx => safeStr(examplesMap[idx]) === sT1);
-    if (allSame) {
-        candidates.push({ type: 'static_value', value: sT1, description: `Valor Constante: "${sT1}"` });
-    }
+    if (allSame) candidates.push({ type: 'static_value', value: sT1, description: `Valor Constante: "${sT1}"` });
 
     colsToScan.forEach(col => {
         const val1 = safeStr(row1[col]);
         if (!val1) return;
 
-        // B. Concatenación con Índice (ITEM + 1 -> ITEM1)
-        const indexStr1 = String(idx1 + 1);
-        if (sT1 === val1 + indexStr1) {
-             if (!row2 || (sT2 === safeStr(row2[col]) + (idx2 + 1))) {
-                 candidates.push({ type: 'append_index', col, description: `[${col}] + N° Fila` });
-             }
-        }
+        // B. Concatenación con Índice
+        if (sT1 === val1 + (idx1 + 1) && (!row2 || sT2 === safeStr(row2[col]) + (idx2 + 1)))
+             candidates.push({ type: 'append_index', col, description: `[${col}] + N° Fila` });
 
-        // C. Prefijo/Sufijo Estático
+        // C. Prefijo/Sufijo
         if (sT1.endsWith(val1) && sT1.length > val1.length) {
             const prefix = sT1.substring(0, sT1.length - val1.length);
-            if (!row2 || (sT2 === prefix + safeStr(row2[col]))) {
+            if (!row2 || sT2 === prefix + safeStr(row2[col]))
                 candidates.push({ type: 'static_prefix', col, prefix, description: `"${prefix}" + [${col}]` });
-            }
         }
         if (sT1.startsWith(val1) && sT1.length > val1.length) {
             const suffix = sT1.substring(val1.length);
-            if (!row2 || (sT2 === safeStr(row2[col]) + suffix)) {
+            if (!row2 || sT2 === safeStr(row2[col]) + suffix)
                 candidates.push({ type: 'static_suffix', col, suffix, description: `[${col}] + "${suffix}"` });
-            }
         }
 
-        // D. Combinación de dos columnas (Merge)
-        // Buscamos si T empieza con Col A y termina con Col B
+        // D. Combinación de Columnas
         colsToScan.forEach(colB => {
             if (col === colB) return;
             const valB1 = safeStr(row1[colB]);
             if (!valB1) return;
-
             if (sT1.startsWith(val1) && sT1.endsWith(valB1)) {
-                // Lo que queda en medio es el separador
                 const sep = sT1.substring(val1.length, sT1.length - valB1.length);
-                if (!row2 || sT2 === safeStr(row2[col]) + sep + safeStr(row2[colB])) {
+                if (!row2 || sT2 === safeStr(row2[col]) + sep + safeStr(row2[colB]))
                     candidates.push({ type: 'concat_cols', col1: col, col2: colB, sep, description: `[${col}] + "${sep}" + [${colB}]` });
+            }
+        });
+
+        // E. Transformaciones Básicas
+        if (val1 === sT1) candidates.push({ type: 'copy', col, description: `Copia de [${col}]` });
+        if (val1.toUpperCase() === sT1) candidates.push({ type: 'upper', col, description: `Mayúsculas de [${col}]` });
+        if (val1.toLowerCase() === sT1) candidates.push({ type: 'lower', col, description: `Minúsculas de [${col}]` });
+        if (val1.trim() === sT1) candidates.push({ type: 'trim', col, description: `Trim [${col}]` });
+
+        // F. SPLIT & PARTES
+        const delimiters = [' ', '-', '_', ',', '.', '/', '|', ':', ';', '@'];
+        delimiters.forEach(delim => {
+            if (val1.includes(delim)) {
+                const parts = val1.split(delim);
+                
+                // Parte Simple
+                const partIdx = parts.indexOf(sT1);
+                if (partIdx !== -1) {
+                    if (!row2 || (safeStr(row2[col]).split(delim)[partIdx] === sT2)) {
+                        candidates.push({ type: 'split_part', col, delim, index: partIdx, description: `Extraer parte ${partIdx+1} (Sep: '${delim}')` });
+                    }
+                }
+                
+                // Reordenamiento (Ej: "Doe, John" -> "John Doe")
+                // Intentamos reconstruir el Target usando partes del Source
+                if (parts.length > 1) {
+                    // Generar todas las combinaciones de índices es costoso, probamos inversión simple o reorden
+                    // Heurística: Chequear si todas las palabras del target están en el source
+                    const targetParts = sT1.split(/[\s,.-]+/); // Separador de salida genérico
+                    const mappedIndices = targetParts.map(tp => parts.indexOf(tp));
+                    
+                    if (!mappedIndices.includes(-1) && mappedIndices.length === targetParts.length) {
+                         // Encontramos que el target está formado por partes del source
+                         // Determinamos el separador de salida (asumimos el primer char no alfanumérico entre palabras)
+                         // Para simplificar, asumimos espacio si no se detecta
+                         let outSep = " ";
+                         if (sT1.includes(" ")) outSep = " ";
+                         else if (sT1.includes("-")) outSep = "-";
+                         
+                         // Validar con row2
+                         if (row2) {
+                             const parts2 = safeStr(row2[col]).split(delim);
+                             const targetParts2 = mappedIndices.map(i => parts2[i]).join(outSep);
+                             if (targetParts2 === sT2) {
+                                 candidates.push({ 
+                                     type: 'split_reorder', col, delim, outSep, indices: mappedIndices, 
+                                     description: `Reordenar partes (Sep: '${delim}')` 
+                                 });
+                             }
+                         } else {
+                             candidates.push({ 
+                                 type: 'split_reorder', col, delim, outSep, indices: mappedIndices, 
+                                 description: `Reordenar partes (Sep: '${delim}')` 
+                             });
+                         }
+                    }
                 }
             }
         });
 
-        // E. Transformaciones básicas
-        if (val1 === sT1) candidates.push({ type: 'copy', col, description: `Copia de [${col}]` });
-        if (val1.toUpperCase() === sT1) candidates.push({ type: 'upper', col, description: `Mayúsculas de [${col}]` });
-        if (val1.toLowerCase() === sT1) candidates.push({ type: 'lower', col, description: `Minúsculas de [${col}]` });
+        // G. EXTRAER ENTRE DELIMITADORES
+        const brackets = [['(', ')'], ['[', ']'], ['{', '}'], ['<', '>'], ["'", "'"], ['"', '"']];
+        brackets.forEach(([start, end]) => {
+             const i1 = val1.indexOf(start);
+             if (i1 !== -1) {
+                 const i2 = val1.indexOf(end, i1 + 1);
+                 if (i2 !== -1) {
+                     const extracted = val1.substring(i1 + start.length, i2);
+                     if (extracted === sT1) {
+                         if (!row2 || (safeStr(row2[col]).includes(start) && safeStr(row2[col]).substring(safeStr(row2[col]).indexOf(start)+start.length, safeStr(row2[col]).indexOf(end, safeStr(row2[col]).indexOf(start))) === sT2)) {
+                             candidates.push({ type: 'extract_between', col, start, end, description: `Extraer entre ${start} y ${end}` });
+                         }
+                     }
+                 }
+             }
+        });
+
+        // H. FECHAS
+        const d1 = new Date(val1);
+        if (isValidDate(d1)) {
+             // Chequear formatos comunes de salida
+             const iso = d1.toISOString().split('T')[0];
+             const us = `${d1.getMonth()+1}/${d1.getDate()}/${d1.getFullYear()}`;
+             const eu = `${d1.getDate()}/${d1.getMonth()+1}/${d1.getFullYear()}`;
+             const year = String(d1.getFullYear());
+             
+             if (sT1 === iso && (!row2 || sT2 === new Date(row2[col]).toISOString().split('T')[0]))
+                 candidates.push({ type: 'date_reformat', col, format: 'iso', description: 'Formato ISO (YYYY-MM-DD)' });
+             else if (sT1 === us && (!row2 || sT2 === `${new Date(row2[col]).getMonth()+1}/${new Date(row2[col]).getDate()}/${new Date(row2[col]).getFullYear()}`))
+                 candidates.push({ type: 'date_reformat', col, format: 'us', description: 'Formato US (MM/DD/YYYY)' });
+             else if (sT1 === eu && (!row2 || sT2 === `${new Date(row2[col]).getDate()}/${new Date(row2[col]).getMonth()+1}/${new Date(row2[col]).getFullYear()}`))
+                 candidates.push({ type: 'date_reformat', col, format: 'eu', description: 'Formato EU (DD/MM/YYYY)' });
+             else if (sT1 === year)
+                 candidates.push({ type: 'date_reformat', col, format: 'year', description: 'Extraer Año' });
+        }
+
+        // I. REGEX COMMON PATTERNS (Mejorado)
+        const patterns = [
+            { name: 'Email', regex: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/ },
+            { name: 'URL', regex: /https?:\/\/[^\s]+/ },
+            { name: 'Dominio', regex: /@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/ },
+            { name: 'Teléfono', regex: /\+?\d[\d -]{8,}\d/ },
+            { name: 'Moneda', regex: /\$?\d{1,3}(?:,\d{3})*(?:\.\d{2})?/ },
+            { name: 'Número', regex: /\d+/ },
+            { name: 'Palabra (Primera)', regex: /^\w+/ },
+            { name: 'Palabra (Última)', regex: /\w+$/ }
+        ];
+        
+        patterns.forEach(pat => {
+            const m1 = val1.match(pat.regex);
+            if (m1 && m1[0] === sT1) {
+                 if (!row2 || (safeStr(row2[col]).match(pat.regex) || [])[0] === sT2) {
+                     candidates.push({ type: 'regex_extract', col, pattern: pat.regex.source, description: `Extraer ${pat.name}` });
+                 }
+            }
+        });
     });
 
     // --- SELECCIÓN DEL MEJOR CANDIDATO ---
@@ -474,7 +584,7 @@ export function useDataTransform() {
   const reorderColumns = (from, to) => { const newOrder = [...columns]; const [moved] = newOrder.splice(from, 1); newOrder.splice(to, 0, moved); const action = { type: 'REORDER_COLS', newOrder }; updateDataState(data, newOrder); logAction(action); };
   const removeTopRows = (n) => { const action = { type: 'DROP_TOP_ROWS', count: n }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction(action); };
   const addCustomColumn = (name, formula) => logAction({ type: 'CUSTOM', name, formula });
-  const addConditionalColumn = (name, rules, def) => logAction({ type: 'COND', name });
+  const addConditionalColumn = (name) => logAction({ type: 'COND', name });
   const applyZScore = (col) => logAction({ type: 'ZSCORE', col });
   const applyMinMax = (col) => logAction({ type: 'MINMAX', col });
   const applyOneHotEncoding = (col) => logAction({ type: 'ONEHOT', col });
@@ -491,7 +601,7 @@ export function useDataTransform() {
   return {
     deleteActionFromHistory,
     applyBatchTransform,
-    promoteHeaders, smartClean, applyFilter, dropColumn, renameColumn, trimText, fillDown,
+    promoteHeaders, smartClean, applyFilter, dropColumn, renameColumn, trimText, fillDown, cleanSymbols,
     removeDuplicates, changeType, addIndexColumn, fillNullsVar, imputeNulls, replaceValues, splitColumn, mergeColumns,
     addAffix, textSubstring, applyRegexExtract, maskData, applyPadStart, extractJson, addDaysToDate, extractDatePart, applyMath, clipValues,
     applyRound, applyGroup, handleCase, duplicateColumn, reorderColumns, removeTopRows, addCustomColumn, addConditionalColumn, applyZScore,

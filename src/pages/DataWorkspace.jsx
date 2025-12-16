@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { useData } from '../context/DataContext';
@@ -6,30 +6,68 @@ import { useDataTransform } from '../hooks/useDataTransform';
 import { useNavigate } from 'react-router-dom';
 import { 
   UploadCloud, CheckCircle2, ArrowRight, FileSpreadsheet, Loader2,
-  Table, X, Grid3X3, Layers, AlertCircle, Crown, HardDrive, Lock, AlertTriangle, Zap, RefreshCw
+  Table, X, Grid3X3, Layers, AlertCircle, Crown, HardDrive, Lock, AlertTriangle, Zap, RefreshCw, Trash2, Folder, Search, Filter, Calendar
 } from 'lucide-react';
 
 export default function DataWorkspace() {
   const { 
-    data, setData, columns, setColumns, setFileName, setHistory, 
+    data, columns, setFileName, 
     loadNewData, updateDataState,
     userTier, planLimits, showToast, 
-    cloudFiles, registerFile, canUploadNew, filesUploadedCount, resetWorkspace
+    cloudFiles, trashFiles, registerFile, updateExistingFile, deleteFile, restoreFile, permanentDeleteFile, canUploadNew, filesUploadedCount, resetWorkspace,
+    checkAutomationRules, projects, assignFileToProject
   } = useData();
 
   const transform = useDataTransform(); 
-
+  
+  const [showTrash, setShowTrash] = useState(false); // Estado para ver papelera
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   
+  // Estados de Búsqueda Avanzada
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterProject, setFilterProject] = useState('all');
+  const [showFilters, setShowFilters] = useState(false);
+
   const [showSourceModal, setShowSourceModal] = useState(false);
   const [availableSources, setAvailableSources] = useState([]); 
   const [tempWorkbook, setTempWorkbook] = useState(null);
   const [tempFileName, setTempFileName] = useState("");
   const [tempFileSize, setTempFileSize] = useState("");
+  const [tempDataToProcess, setTempDataToProcess] = useState(null); // Estado para guardar datos mientras se decide duplicado
+
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, fileId: null, title: '', message: '' });
+  const [alertModal, setAlertModal] = useState({ isOpen: false, title: '', message: '' });
+  const [duplicateModal, setDuplicateModal] = useState({ isOpen: false, existingFile: null, newData: null, fName: '', fSize: '' });
+  const [projectAssignModal, setProjectAssignModal] = useState({ isOpen: false, fileId: null });
 
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
+
+  // --- FILTRADO AVANZADO ---
+  const filteredFiles = useMemo(() => {
+      let files = showTrash ? trashFiles : cloudFiles;
+
+      // 1. Búsqueda de Texto (Nombre o Proyecto)
+      if (searchQuery) {
+          const lowerQ = searchQuery.toLowerCase();
+          files = files.filter(f => {
+              const pName = projects.find(p => p.id === f.projectId)?.name.toLowerCase() || '';
+              return f.filename.toLowerCase().includes(lowerQ) || pName.includes(lowerQ);
+          });
+      }
+
+      // 2. Filtro por Proyecto
+      if (filterProject !== 'all') {
+          if (filterProject === 'none') {
+              files = files.filter(f => !f.projectId);
+          } else {
+              files = files.filter(f => f.projectId === filterProject);
+          }
+      }
+
+      return files;
+  }, [cloudFiles, trashFiles, showTrash, searchQuery, filterProject, projects]);
 
   // --- DETECCIÓN DE ISLAS (OFFSET CORRECTO) ---
   const detectDataBlocks = (ws, sheetName) => {
@@ -95,8 +133,38 @@ export default function DataWorkspace() {
       const rawKeys = Object.keys(finalData[0]);
       if (rawKeys.length === 0) { setError('Sin columnas válidas.'); setLoading(false); return; }
 
-      // 1. REGISTRAR Y OBTENER HISTORIAL
-      const registration = await registerFile(fName, finalData.length, fSize);
+      // --- DETECCIÓN DE DUPLICADOS ---
+      const existingFile = cloudFiles.find(f => f.filename === fName);
+      if (existingFile) {
+          setDuplicateModal({
+              isOpen: true,
+              existingFile,
+              newData: finalData,
+              fName,
+              fSize
+          });
+          setLoading(false);
+          return; // Detenemos flujo hasta decisión del usuario
+      }
+
+      await finalizeRegistration(finalData, fName, fSize);
+    } else {
+      setError('El origen seleccionado parece estar vacío.');
+      setLoading(false);
+    }
+  };
+
+  const finalizeRegistration = async (finalData, fName, fSize, existingFileId = null) => {
+      setLoading(true);
+      const rawKeys = Object.keys(finalData[0]);
+      
+      // 1. REGISTRAR O ACTUALIZAR
+      let registration;
+      if (existingFileId) {
+          registration = await updateExistingFile(existingFileId, finalData.length, fSize);
+      } else {
+          registration = await registerFile(fName, finalData.length, fSize);
+      }
       
       // 2. CARGAR DATOS CRUDOS
       loadNewData(finalData, rawKeys, fName);
@@ -106,19 +174,42 @@ export default function DataWorkspace() {
           if (registration.actions && registration.actions.length > 0) {
               const res = transform.applyBatchTransform(finalData, rawKeys, registration.actions);
               updateDataState(res.data, res.columns);
-              showToast('Transformaciones históricas aplicadas automáticamente.', 'success');
+              showToast(existingFileId ? 'Automatización restaurada correctamente.' : 'Transformaciones históricas aplicadas automáticamente.', 'success');
+          } else {
+              // 4. SI NO HAY HISTORIAL, BUSCAR AUTOMATIZACIONES (REGLAS)
+              const autoActions = checkAutomationRules({ filename: fName }, rawKeys);
+              if (autoActions.length > 0) {
+                  const res = transform.applyBatchTransform(finalData, rawKeys, autoActions);
+                  updateDataState(res.data, res.columns);
+              }
           }
 
           setTempWorkbook(null);
           setAvailableSources([]);
           setShowSourceModal(false);
+          setDuplicateModal({ isOpen: false, existingFile: null, newData: null, fName: '', fSize: '' });
+          setLoading(false);
       } else {
           setLoading(false);
+          // Si falla, cerramos el modal también para no bloquear, el toast ya mostró el error
+          setDuplicateModal({ isOpen: false, existingFile: null, newData: null, fName: '', fSize: '' });
       }
-    } else {
-      setError('El origen seleccionado parece estar vacío.');
-      setLoading(false);
-    }
+  };
+
+  const handleDuplicateDecision = (decision) => {
+      const { existingFile, newData, fName, fSize } = duplicateModal;
+      if (decision === 'update') {
+          // Actualizar existente (Sin consumo de crédito extra)
+          finalizeRegistration(newData, fName, fSize, existingFile.id);
+      } else if (decision === 'copy') {
+          // Crear copia (Renombrar y consumir crédito)
+          // registerFile en DataContext ya maneja el renombrado automático si existe
+          finalizeRegistration(newData, fName, fSize, null); 
+      } else {
+          // Cancelar
+          setDuplicateModal({ isOpen: false, existingFile: null, newData: null, fName: '', fSize: '' });
+          if(fileInputRef.current) fileInputRef.current.value = "";
+      }
   };
 
   const handleFileUpload = (e) => {
@@ -225,13 +316,174 @@ export default function DataWorkspace() {
   
   const triggerReload = (filename) => {
       showToast(`Cargando: ${filename}`, 'info');
-      // Al ser clickeado desde la lista lateral, invocamos el click en el input oculto
-      // Ahora funcionará porque el input siempre estará en el DOM
       if (fileInputRef.current) fileInputRef.current.click();
+  };
+
+  const handleDeleteFile = (id, e) => {
+      e.stopPropagation();
+      setConfirmModal({
+          isOpen: true,
+          fileId: id,
+          title: 'Advertencia',
+          message: 'Al eliminar este archivo, no recuperarás el crédito utilizado y todas las automatizaciones asociadas se perderán permanentemente. ¿Deseas continuar?'
+      });
+  };
+
+  const confirmDelete = async () => {
+      if (confirmModal.fileId) {
+          await deleteFile(confirmModal.fileId);
+          setConfirmModal({ isOpen: false, fileId: null, title: '', message: '' });
+      }
+  };
+
+  const handleUploadClick = () => {
+      // 1. Verificación estricta de límite total
+      if (!canUploadNew && !cloudFiles.length) {
+          // Caso extremo: estado inconsistente
+          setAlertModal({
+              isOpen: true,
+              title: 'Límite alcanzado',
+              message: 'Has utilizado tus 3 créditos disponibles. Por favor, vacía tu papelera.'
+          });
+          return;
+      }
+      if (!canUploadNew) {
+           setAlertModal({
+              isOpen: true,
+              title: 'Límite alcanzado',
+              message: 'Debes eliminar permanentemente archivos de la papelera para recuperar créditos. El límite incluye archivos eliminados temporalmente.'
+          });
+          return;
+      }
+      fileInputRef.current.click();
   };
 
   return (
     <div className="h-full flex items-start p-3 bg-gray-50/50 dark:bg-black/20 animate-in fade-in zoom-in-95 duration-300 relative overflow-hidden">
+      
+      {/* MODAL DE DUPLICADO */}
+      {duplicateModal.isOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+             <div className="bg-white dark:bg-[#1a1a1a] rounded-xl shadow-2xl w-full max-w-lg border border-gray-200 dark:border-wolf/20 overflow-hidden">
+                <div className="p-6">
+                    <div className="flex items-start gap-4 mb-6">
+                        <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 text-blue-500 rounded-full flex items-center justify-center shrink-0">
+                            <Layers size={24} />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Archivo Duplicado Detectado</h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+                                Ya existe un archivo llamado <span className="font-mono bg-gray-100 dark:bg-white/10 px-1 rounded">{duplicateModal.fName}</span> en tu nube.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-3">
+                        <button 
+                            onClick={() => handleDuplicateDecision('update')}
+                            className="w-full text-left p-4 rounded-xl border border-blue-200 dark:border-blue-900/30 bg-blue-50 dark:bg-blue-900/10 hover:bg-blue-100 dark:hover:bg-blue-900/20 transition-all group"
+                        >
+                            <div className="flex justify-between items-center mb-1">
+                                <span className="font-bold text-blue-700 dark:text-blue-400">Actualizar Existente (Recomendado)</span>
+                                <span className="text-[10px] bg-blue-200 dark:bg-blue-800 text-blue-800 dark:text-white px-2 py-0.5 rounded-full font-bold">Sin Costo</span>
+                            </div>
+                            <p className="text-xs text-blue-600 dark:text-blue-300 opacity-80">
+                                Reemplaza los datos pero <b>mantiene tus automatizaciones</b> y no consume créditos adicionales.
+                            </p>
+                        </button>
+
+                        <button 
+                            onClick={() => handleDuplicateDecision('copy')}
+                            className="w-full text-left p-4 rounded-xl border border-gray-200 dark:border-wolf/20 hover:border-persian/50 hover:bg-gray-50 dark:hover:bg-white/5 transition-all group"
+                        >
+                             <div className="flex justify-between items-center mb-1">
+                                <span className="font-bold text-gray-700 dark:text-zinc">Crear Copia Nueva</span>
+                                <span className="text-[10px] bg-gray-200 dark:bg-white/10 text-gray-600 dark:text-gray-400 px-2 py-0.5 rounded-full font-bold">-1 Crédito</span>
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-wolf">
+                                Guarda como <code>{duplicateModal.fName.replace('.csv', ' (1).csv')}</code>. Perderás el historial de cambios previo.
+                            </p>
+                        </button>
+                    </div>
+
+                    <div className="mt-6 flex justify-end">
+                        <button onClick={() => handleDuplicateDecision('cancel')} className="px-4 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-white font-medium text-sm">Cancelar Subida</button>
+                    </div>
+                </div>
+             </div>
+        </div>
+      )}
+
+      {/* MODAL DE ASIGNACIÓN DE PROYECTO */}
+      {projectAssignModal.isOpen && (
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+             <div className="bg-white dark:bg-[#1a1a1a] rounded-xl shadow-2xl w-full max-w-sm border border-gray-200 dark:border-wolf/20 overflow-hidden">
+                <div className="p-6">
+                    <h3 className="font-bold text-lg dark:text-white mb-4">Mover a Proyecto</h3>
+                    <div className="space-y-2 max-h-60 overflow-y-auto custom-scrollbar mb-4">
+                        <button 
+                            onClick={() => { assignFileToProject(projectAssignModal.fileId, null); setProjectAssignModal({ isOpen: false, fileId: null }); }}
+                            className="w-full text-left p-3 rounded-lg border border-dashed border-gray-300 dark:border-wolf/20 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-sm text-gray-500"
+                        >
+                            Sin Proyecto (Raíz)
+                        </button>
+                        {projects.map(p => (
+                            <button 
+                                key={p.id} 
+                                onClick={() => { assignFileToProject(projectAssignModal.fileId, p.id); setProjectAssignModal({ isOpen: false, fileId: null }); }}
+                                className="w-full text-left p-3 rounded-lg border border-gray-200 dark:border-wolf/10 hover:border-persian/50 hover:bg-persian/5 transition-colors flex items-center gap-3"
+                            >
+                                <Folder size={18} className="text-persian" />
+                                <span className="font-medium text-gray-700 dark:text-zinc text-sm">{p.name}</span>
+                            </button>
+                        ))}
+                        {projects.length === 0 && <p className="text-center text-xs text-gray-400 py-2">No hay proyectos creados.</p>}
+                    </div>
+                    <div className="flex justify-end">
+                        <button onClick={() => setProjectAssignModal({ isOpen: false, fileId: null })} className="px-4 py-2 text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5 rounded-lg text-sm">Cancelar</button>
+                    </div>
+                </div>
+             </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONFIRMACIÓN */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+             <div className="bg-white dark:bg-[#1a1a1a] rounded-xl shadow-2xl w-full max-w-md border border-red-200 dark:border-red-900/30 overflow-hidden">
+                <div className="p-6 text-center">
+                    <div className="w-16 h-16 bg-red-100 dark:bg-red-900/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <AlertTriangle size={32} />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{confirmModal.title}</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-6 leading-relaxed">{confirmModal.message}</p>
+                    <div className="flex gap-3 justify-center">
+                        <button onClick={() => setConfirmModal({...confirmModal, isOpen: false})} className="px-5 py-2.5 rounded-lg border border-gray-200 dark:border-wolf/20 text-gray-600 dark:text-gray-400 font-semibold hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">Cancelar</button>
+                        <button onClick={confirmDelete} className="px-5 py-2.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-bold shadow-lg shadow-red-500/20 transition-all active:scale-95">Eliminar Archivo</button>
+                    </div>
+                </div>
+             </div>
+        </div>
+      )}
+
+      {/* MODAL DE ALERTA (LÍMITE) */}
+      {alertModal.isOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+             <div className="bg-white dark:bg-[#1a1a1a] rounded-xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-wolf/20 overflow-hidden">
+                <div className="p-6 text-center">
+                    <div className="w-16 h-16 bg-gray-100 dark:bg-white/5 text-gray-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Lock size={32} />
+                    </div>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{alertModal.title}</h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-300 mb-6 leading-relaxed">{alertModal.message}</p>
+                    <div className="flex gap-3 justify-center">
+                        <button onClick={() => setAlertModal({...alertModal, isOpen: false})} className="px-5 py-2.5 rounded-lg border border-gray-200 dark:border-wolf/20 text-gray-600 dark:text-gray-400 font-semibold hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">Entendido</button>
+                        <button onClick={() => navigate('/billing')} className="px-5 py-2.5 rounded-lg bg-persian hover:bg-sea text-white font-bold shadow-lg shadow-persian/20 transition-all active:scale-95">Mejorar Plan</button>
+                    </div>
+                </div>
+             </div>
+        </div>
+      )}
       
       {/* --- INPUT DE ARCHIVO GLOBAL (MOVIDO AQUÍ PARA QUE SIEMPRE EXISTA) --- */}
       <input 
@@ -296,7 +548,7 @@ export default function DataWorkspace() {
                 <div className="flex-1 flex flex-col items-center justify-center p-12 text-center overflow-auto">
                     <div 
                         className={`w-full max-w-xl border-2 border-dashed rounded-2xl p-12 flex flex-col items-center justify-center transition-all group ${!canUploadNew && !cloudFiles.length ? 'border-red-300 bg-red-50 dark:bg-red-900/10 cursor-not-allowed' : 'border-gray-300 dark:border-wolf/20 bg-white dark:bg-carbon hover:border-persian/50 cursor-pointer'}`}
-                        onClick={() => (canUploadNew || cloudFiles.length > 0) && fileInputRef.current.click()}
+                        onClick={handleUploadClick}
                     >
                         <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 transition-transform ${!canUploadNew && !cloudFiles.length ? 'bg-red-100 text-red-500' : 'bg-persian/10 text-persian group-hover:scale-110'}`}>
                             {!canUploadNew && !cloudFiles.length ? <Lock size={40}/> : <UploadCloud size={40} />}
@@ -304,8 +556,9 @@ export default function DataWorkspace() {
                         {!canUploadNew ? (
                             <>
                                 <h3 className="text-xl font-bold text-red-500 mb-2">Límite Alcanzado</h3>
-                                <p className="text-gray-500 dark:text-wolf mb-4 max-w-xs mx-auto">Has consumido {filesUploadedCount} de {planLimits.maxFiles} créditos.</p>
-                                <button onClick={() => navigate('/billing')} className="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg">Mejorar Plan</button>
+                                <p className="text-gray-500 dark:text-wolf mb-4 max-w-xs mx-auto">Has utilizado tus 3 créditos disponibles. Elimina archivos de la papelera permanentemente para liberar espacio.</p>
+                                <button onClick={() => setShowTrash(true)} className="bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 px-6 py-2 rounded-xl font-bold shadow-sm mb-2">Ver Papelera</button>
+                                <button onClick={() => navigate('/billing')} className="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg block w-full max-w-[200px] mx-auto">Mejorar Plan</button>
                             </>
                         ) : (
                             <>
@@ -350,8 +603,50 @@ export default function DataWorkspace() {
         {/* PANEL DERECHO: BIBLIOTECA */}
         <div className="w-full md:w-80 bg-white dark:bg-carbon border border-gray-200 dark:border-wolf/10 rounded-xl shadow-sm flex flex-col h-full overflow-hidden shrink-0">
             <div className="p-4 border-b border-gray-200 dark:border-wolf/10 bg-gray-50 dark:bg-carbon-light shrink-0">
-                <h3 className="font-bold text-gray-900 dark:text-zinc flex items-center gap-2"><HardDrive size={18} className="text-persian"/> Mis Archivos</h3>
-                <div className="flex justify-between items-center mt-2 text-xs">
+                <div className="flex justify-between items-center">
+                    <h3 className="font-bold text-gray-900 dark:text-zinc flex items-center gap-2"><HardDrive size={18} className="text-persian"/> {showTrash ? 'Papelera' : 'Mis Archivos'}</h3>
+                    <div className="flex items-center gap-2">
+                         <button onClick={() => setShowFilters(!showFilters)} className={`p-1.5 rounded hover:bg-gray-200 dark:hover:bg-white/10 transition-colors ${showFilters ? 'bg-persian/10 text-persian' : 'text-gray-400'}`} title="Filtros Avanzados">
+                            <Filter size={16}/>
+                         </button>
+                        <button onClick={() => setShowTrash(!showTrash)} className={`p-1.5 rounded hover:bg-gray-200 dark:hover:bg-white/10 transition-colors ${showTrash ? 'text-red-500 bg-red-50 dark:bg-red-900/10' : 'text-gray-400'}`} title={showTrash ? "Ver Archivos" : "Ver Papelera"}>
+                            {showTrash ? <ArrowRight size={16}/> : <Trash2 size={16}/>}
+                        </button>
+                    </div>
+                </div>
+                
+                {/* BUSCADOR */}
+                <div className="mt-3 relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                    <input 
+                        type="text" 
+                        placeholder="Buscar archivo o proyecto..." 
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-white dark:bg-black/20 border border-gray-200 dark:border-wolf/10 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:border-persian outline-none transition-colors"
+                    />
+                </div>
+
+                {/* FILTROS EXPANDIBLES (MEJORADOS) */}
+                {showFilters && (
+                    <div className="mt-2 pt-2 border-t border-gray-200 dark:border-wolf/10 animate-in slide-in-from-top-2">
+                        <select 
+                            value={filterProject} 
+                            onChange={(e) => setFilterProject(e.target.value)}
+                            className="w-full bg-white dark:bg-[#2d2d2d] border border-gray-300 dark:border-wolf/20 rounded-lg px-3 py-2 text-xs text-gray-800 dark:text-zinc outline-none shadow-sm focus:ring-1 focus:ring-persian"
+                        >
+                            <option value="all" className="bg-white dark:bg-[#2d2d2d] text-gray-800 dark:text-zinc">Todos los Proyectos</option>
+                            <option value="none" className="bg-white dark:bg-[#2d2d2d] text-gray-800 dark:text-zinc">Sin Proyecto</option>
+                            {projects.map(p => (
+                                <option key={p.id} value={p.id} className="bg-white dark:bg-[#2d2d2d] text-gray-800 dark:text-zinc">
+                                    {p.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
+                <div className="flex justify-between items-center mt-3 text-xs">
                     <span className="text-gray-500 dark:text-wolf">Créditos Usados:</span>
                     <span className={`font-bold ${!canUploadNew ? 'text-red-500' : 'text-green-500'}`}>{filesUploadedCount} / {planLimits.maxFiles}</span>
                 </div>
@@ -361,25 +656,58 @@ export default function DataWorkspace() {
             </div>
             
             <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2 bg-gray-50/30 dark:bg-black/10">
-                {cloudFiles.length === 0 ? (
-                    <div className="text-center py-10 text-gray-400 text-xs">No has subido archivos aún.</div>
-                ) : (
-                    cloudFiles.map(file => (
-                        <div 
-                            key={file.id} 
-                            onClick={() => triggerReload(file.filename)}
-                            className="bg-white dark:bg-carbon-light p-3 rounded-lg border border-gray-200 dark:border-wolf/10 shadow-sm flex items-center justify-between group hover:border-persian/50 hover:bg-persian/5 cursor-pointer transition-all"
-                            title="Clic para re-subir (Gratis)"
-                        >
-                            <div className="flex-1 min-w-0 pr-2">
-                                <div className="flex items-center gap-2 mb-1"><FileSpreadsheet size={14} className="text-persian shrink-0"/><p className="text-sm font-medium text-gray-700 dark:text-zinc truncate" title={file.filename}>{file.filename}</p></div>
-                                <div className="flex items-center gap-2 text-[10px] text-gray-400"><span>{file.row_count?.toLocaleString()} filas</span>
-                                    {file.actions && file.actions.length > 0 && <span className="flex items-center gap-1 text-persian bg-persian/10 px-1.5 py-0.5 rounded border border-persian/20"><Zap size={10} /> Auto</span>}
+                {showTrash ? (
+                    filteredFiles.length === 0 ? (
+                        <div className="text-center py-10 text-gray-400 text-xs">{searchQuery ? 'No hay resultados en papelera.' : 'Papelera vacía.'}</div>
+                    ) : (
+                        filteredFiles.map(file => (
+                            <div key={file.id} className="bg-red-50 dark:bg-red-900/10 p-3 rounded-lg border border-red-100 dark:border-red-900/20 shadow-sm flex items-center justify-between opacity-80 hover:opacity-100 transition-opacity">
+                                <div className="flex-1 min-w-0 pr-2">
+                                    <div className="flex items-center gap-2 mb-1"><FileSpreadsheet size={14} className="text-red-400 shrink-0"/><p className="text-sm font-medium text-gray-700 dark:text-zinc truncate line-through decoration-red-500/50">{file.filename}</p></div>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <button onClick={() => restoreFile(file.id)} className="p-1.5 text-green-500 hover:bg-green-100 dark:hover:bg-green-900/20 rounded transition-colors" title="Restaurar"><RefreshCw size={14}/></button>
+                                    <button onClick={() => permanentDeleteFile(file.id)} className="p-1.5 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/20 rounded transition-colors" title="Eliminar Permanentemente"><X size={14}/></button>
                                 </div>
                             </div>
-                            <div className="text-persian opacity-0 group-hover:opacity-100 transition-opacity"><RefreshCw size={16} /></div>
-                        </div>
-                    ))
+                        ))
+                    )
+                ) : (
+                    filteredFiles.length === 0 ? (
+                        <div className="text-center py-10 text-gray-400 text-xs">{searchQuery ? 'No se encontraron archivos.' : 'No has subido archivos aún.'}</div>
+                    ) : (
+                        filteredFiles.map(file => (
+                            <div 
+                                key={file.id} 
+                                onClick={() => triggerReload(file.filename)}
+                                className="bg-white dark:bg-carbon-light p-3 rounded-lg border border-gray-200 dark:border-wolf/10 shadow-sm flex items-center justify-between group hover:border-persian/50 hover:bg-persian/5 cursor-pointer transition-all"
+                                title="Clic para re-subir (Gratis)"
+                            >
+                                <div className="flex-1 min-w-0 pr-2">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <FileSpreadsheet size={14} className="text-persian shrink-0"/>
+                                        <p className="text-sm font-medium text-gray-700 dark:text-zinc truncate" title={file.filename}>{file.filename}</p>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-[10px] text-gray-400">
+                                        <span>{file.row_count?.toLocaleString()} filas</span>
+                                        {file.actions && file.actions.length > 0 && <span className="flex items-center gap-1 text-persian bg-persian/10 px-1.5 py-0.5 rounded border border-persian/20"><Zap size={10} /> Auto</span>}
+                                        {file.projectId && <span className="flex items-center gap-1 text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-1.5 py-0.5 rounded"><Folder size={10} /> {projects.find(p => p.id === file.projectId)?.name}</span>}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); setProjectAssignModal({ isOpen: true, fileId: file.id }); }} 
+                                        className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-colors" 
+                                        title="Mover a Proyecto"
+                                    >
+                                        <Folder size={14}/>
+                                    </button>
+                                    <button onClick={(e) => handleDeleteFile(file.id, e)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors" title="Eliminar"><Trash2 size={14}/></button>
+                                    <div className="text-persian opacity-0 group-hover:opacity-100 transition-opacity p-1.5"><RefreshCw size={14} /></div>
+                                </div>
+                            </div>
+                        ))
+                    )
                 )}
             </div>
             

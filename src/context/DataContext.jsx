@@ -25,13 +25,58 @@ export function DataProvider({ children }) {
   // --- SUSCRIPCIÓN & USUARIO ---
   const [userTier, setUserTier] = useState('free');
   const [userEmail, setUserEmail] = useState('');
-  const [uploadsUsed, setUploadsUsed] = useState(0);
   
   const [cloudFiles, setCloudFiles] = useState([]); 
+  const [deletedFileIds, setDeletedFileIds] = useState(() => {
+      const stored = localStorage.getItem('nocodepy_trash');
+      return stored ? JSON.parse(stored) : [];
+  }); // Papelera local
+  
+  // --- GESTIÓN DE PROYECTOS (LOCAL MOCK) ---
+  const [projects, setProjects] = useState(() => {
+      const stored = localStorage.getItem('nocodepy_projects');
+      return stored ? JSON.parse(stored) : [];
+  });
+  const [fileProjectMap, setFileProjectMap] = useState(() => {
+      const stored = localStorage.getItem('nocodepy_file_project_map');
+      return stored ? JSON.parse(stored) : {};
+  });
+
   const [isLoadingFiles, setIsLoadingFiles] = useState(true);
   const [toasts, setToasts] = useState([]);
 
   // --- 1. INICIALIZACIÓN ---
+  const refreshCloudFiles = async (userId) => {
+    const uid = userId || (await supabase.auth.getUser()).data.user?.id;
+    if (!uid) return;
+    const { data: files } = await supabase.from('user_files').select('*').eq('user_id', uid).order('created_at', { ascending: false });
+    if (files) {
+      // Enriquecer con Project ID
+      const filesWithProjects = files.map(f => ({
+          ...f,
+          projectId: fileProjectMap[f.id] || null
+      }));
+      setCloudFiles(filesWithProjects);
+      setIsLoadingFiles(false);
+    }
+  };
+
+  // Persistencia de Proyectos
+  useEffect(() => {
+      localStorage.setItem('nocodepy_projects', JSON.stringify(projects));
+  }, [projects]);
+
+  useEffect(() => {
+      localStorage.setItem('nocodepy_file_project_map', JSON.stringify(fileProjectMap));
+      // Actualizar cloudFiles en caliente si cambia el mapa
+      setCloudFiles(prev => prev.map(f => ({ ...f, projectId: fileProjectMap[f.id] || null })));
+  }, [fileProjectMap]);
+
+  // Guardar Papelera local
+  useEffect(() => {
+      localStorage.setItem('nocodepy_trash', JSON.stringify(deletedFileIds));
+  }, [deletedFileIds]);
+
   useEffect(() => {
     let mounted = true;
     const initSession = async () => {
@@ -57,7 +102,7 @@ export function DataProvider({ children }) {
           
           if (profile) {
             setUserTier(profile.tier || 'free');
-            setUploadsUsed(profile.uploads_count || 0);
+            // setUploadsUsed(profile.uploads_count || 0); // Deshabilitado para usar cloudFiles.length como límite activo
           }
         } catch (e) { console.error("Error perfil:", e); }
 
@@ -68,15 +113,7 @@ export function DataProvider({ children }) {
     return () => { mounted = false; };
   }, []);
 
-  const refreshCloudFiles = async (userId) => {
-    const uid = userId || (await supabase.auth.getUser()).data.user?.id;
-    if (!uid) return;
-    const { data: files } = await supabase.from('user_files').select('*').eq('user_id', uid).order('created_at', { ascending: false });
-    if (files) {
-      setCloudFiles(files);
-      setIsLoadingFiles(false);
-    }
-  };
+
 
   // --- 2. TOASTS (Con UUID) ---
   const showToast = useCallback((message, type = 'success') => {
@@ -97,35 +134,57 @@ export function DataProvider({ children }) {
   };
 
   // --- 4. REGISTRO DE ARCHIVOS (PERSISTENCIA) ---
+  const updateExistingFile = async (existingFileId, rows, size) => {
+     // Actualizar metadatos del archivo existente sin consumir crédito nuevo
+     const { data: updatedFile, error } = await supabase.from('user_files').update({
+         row_count: rows,
+         file_size: size
+         // updated_at eliminado para evitar error de esquema si la columna no existe
+     }).eq('id', existingFileId).select().single();
+
+     if (error) {
+         showToast('Error al actualizar archivo: ' + error.message, 'error');
+         return { success: false };
+     }
+
+     setCurrentFileId(existingFileId);
+     // Recuperar acciones guardadas
+     const existingActions = updatedFile.actions || [];
+     setActions(existingActions);
+     setFileName(updatedFile.filename);
+
+     logSystemEvent('FILE_UPDATE', { fileId: existingFileId, filename: updatedFile.filename });
+     await refreshCloudFiles(); // Refrescar lista
+     
+     return { success: true, actions: existingActions, isUpdate: true };
+  };
+
   const registerFile = async (filename, rows, size) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
-    // Lógica para registrar/recuperar archivo
-    const existingFile = cloudFiles.find(f => f.filename === filename);
-    if (existingFile) {
-        // ... (lógica de recuperación de acciones y fileToUse) ...
-        // SIMPLIFICADO: En un entorno real, la lógica de recuperación de acciones frescas debe ir aquí.
-        // Usamos el archivo en memoria por ahora para evitar complejidad de mock en esta función
-        
-        setCurrentFileId(existingFile.id); 
-        
-        let recoveredActions = [];
-        if (existingFile.actions && Array.isArray(existingFile.actions) && existingFile.actions.length > 0) {
-            recoveredActions = existingFile.actions;
-            setActions(recoveredActions);
-            showToast(`⚡ ${recoveredActions.length} pasos restaurados.`, 'success');
-        } else {
-            setActions([]);
-        }
-        return { success: true, actions: recoveredActions };
+    // 1. Verificación de existencia previa y Sistema de nombres únicos
+    let finalName = filename;
+    let counter = 1;
+    
+    // Aseguramos que la lista esté actualizada antes de verificar
+    // (Nota: cloudFiles ya debería estar sincronizado, pero iteramos sobre él)
+    while (cloudFiles.some(f => f.filename === finalName)) {
+        const nameParts = filename.split('.');
+        const ext = nameParts.length > 1 ? '.' + nameParts.pop() : '';
+        const base = nameParts.join('.');
+        finalName = `${base} (${counter})${ext}`;
+        counter++;
     }
 
+    if (finalName !== filename) {
+        showToast(`Archivo renombrado a: ${finalName}`, 'info');
+    }
 
     // Nuevo archivo: Costo de crédito
     const { data: newFile, error } = await supabase.from('user_files').insert({
       user_id: user.id,
-      filename: filename,
+      filename: finalName,
       row_count: rows,
       file_size: size,
       actions: [] 
@@ -138,16 +197,18 @@ export function DataProvider({ children }) {
 
     setCurrentFileId(newFile?.id || 'temp-id'); 
     setActions([]); 
+    setFileName(finalName); // Actualizamos el nombre en el contexto
 
-    // Incrementar contador en BD
+    // Incrementar contador en BD (Solo informativo)
     const { data: currentProfile } = await supabase.from('profiles').select('uploads_count').eq('id', user.id).single();
     const newCount = (currentProfile?.uploads_count || 0) + 1;
 
     await supabase.from('profiles').update({ uploads_count: newCount }).eq('id', user.id);
-    setUploadsUsed(newCount);
+    // setUploadsUsed(newCount); // Deshabilitado
     
     await refreshCloudFiles(user.id);
-    return { success: true, actions: [] };
+    logSystemEvent('FILE_CREATE', { fileId: newFile.id, filename: finalName });
+    return { success: true, actions: [], isUpdate: false };
   };
 
   // --- 5. GESTIÓN DE ACCIONES ---
@@ -158,6 +219,39 @@ export function DataProvider({ children }) {
       setCloudFiles(prev => prev.map(f => 
         f.id === currentFileId ? { ...f, actions: newActions } : f
       ));
+  };
+
+  // Soft Delete (Papelera)
+  const deleteFile = async (fileId) => {
+      if (!deletedFileIds.includes(fileId)) {
+          setDeletedFileIds(prev => [...prev, fileId]);
+          showToast('Archivo movido a la papelera.', 'info');
+          // Si el archivo eliminado es el actual, limpiar el workspace
+          if (currentFileId === fileId) {
+             resetWorkspace();
+          }
+      }
+  };
+
+  // Restaurar de Papelera
+  const restoreFile = (fileId) => {
+      setDeletedFileIds(prev => prev.filter(id => id !== fileId));
+      showToast('Archivo restaurado.', 'success');
+  };
+
+  // Eliminación Permanente (Hard Delete)
+  const permanentDeleteFile = async (fileId) => {
+      const { error } = await supabase.from('user_files').delete().eq('id', fileId);
+      if (error) {
+          showToast('Error al eliminar: ' + error.message, 'error');
+          logSystemEvent('DELETE_ERROR', { fileId, error: error.message });
+          return;
+      }
+      setCloudFiles(prev => prev.filter(f => f.id !== fileId));
+      setDeletedFileIds(prev => prev.filter(id => id !== fileId)); // Limpiar de papelera también
+      
+      logSystemEvent('PERMANENT_DELETE', { fileId, status: 'success' });
+      showToast('Archivo eliminado permanentemente.', 'success');
   };
 
   // Setters expuestos para hooks
@@ -226,7 +320,7 @@ export function DataProvider({ children }) {
 
     // 2. Llama a tu función de Back-end (Edge Function)
     // ESTA URL DEBE SER EL ENDPOINT DE TU FUNCIÓN QUE CREA LA SESIÓN DE STRIPE CHECKOUT
-    const edgeFunctionUrl = `${window.location.origin}/api/create-stripe-session`; 
+    // const edgeFunctionUrl = `${window.location.origin}/api/create-stripe-session`; 
     
     // Simulación de respuesta de back-end:
     /*
@@ -251,7 +345,115 @@ export function DataProvider({ children }) {
     pro: { maxRows: 1000000, maxFiles: 50, exportCode: true } 
   };
 
-  const canUploadNew = uploadsUsed < PLAN_LIMITS[userTier].maxFiles;
+  // Límite basado en archivos totales (Activos + Papelera)
+  const activeFiles = cloudFiles.filter(f => !deletedFileIds.includes(f.id));
+  const trashFiles = cloudFiles.filter(f => deletedFileIds.includes(f.id));
+  
+  // Requisito estricto: El límite cuenta TODOS los archivos, incluso los de la papelera
+  const totalFilesUsage = cloudFiles.length; 
+  const canUploadNew = totalFilesUsage < PLAN_LIMITS[userTier].maxFiles;
+
+  // --- GESTIÓN DE PROYECTOS ---
+  const createProject = (projectData) => {
+      const newProject = {
+          id: crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+          filesCount: 0,
+          ...projectData
+      };
+      setProjects(prev => [newProject, ...prev]);
+      showToast('Proyecto creado exitosamente.', 'success');
+      logSystemEvent('PROJECT_CREATE', { id: newProject.id, name: newProject.name });
+  };
+
+  const deleteProject = (projectId) => {
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+      // Desvincular archivos
+      setFileProjectMap(prev => {
+          const newMap = { ...prev };
+          Object.keys(newMap).forEach(fileId => {
+              if (newMap[fileId] === projectId) delete newMap[fileId];
+          });
+          return newMap;
+      });
+      showToast('Proyecto eliminado.', 'info');
+      logSystemEvent('PROJECT_DELETE', { id: projectId });
+  };
+
+  const assignFileToProject = (fileId, projectId) => {
+      setFileProjectMap(prev => ({
+          ...prev,
+          [fileId]: projectId
+      }));
+      showToast('Archivo movido al proyecto.', 'success');
+  };
+
+  // --- AUTOMATIZACIÓN ---
+  const checkAutomationRules = (fileMeta) => {
+      const storedRules = localStorage.getItem('nocodepy_automation_rules');
+      if (!storedRules) return [];
+      
+      const rules = JSON.parse(storedRules);
+      const activeRules = rules.filter(r => r.active && r.trigger === 'on_upload');
+      
+      const actionsToApply = [];
+      const rulesExecuted = [];
+
+      activeRules.forEach(rule => {
+          let match = false;
+          // 1. Evaluar Condición
+          if (rule.condition.type === 'always') match = true;
+          else if (rule.condition.type === 'filename_contains') {
+              if (fileMeta.filename.toLowerCase().includes(rule.condition.value.toLowerCase())) match = true;
+          }
+          // Futuro: column_exists, etc.
+
+          if (match) {
+              // 2. Definir Acción
+              if (rule.action.type === 'auto_clean') {
+                  // Acciones predefinidas de limpieza
+                  actionsToApply.push({ type: 'DELETE_EMPTY_ROWS', description: 'Auto-Clean: Eliminar filas vacías' });
+                  actionsToApply.push({ type: 'TRIM_ALL', description: 'Auto-Clean: Recortar espacios' });
+              } else if (rule.action.type === 'convert_format') {
+                   // Añadimos una acción especial de sugerencia que no modifica datos pero queda en historial
+                   actionsToApply.push({ type: 'SUGGEST_EXPORT', format: rule.action.config, description: `Automatización: Sugerencia Exportar a ${rule.action.config}` });
+              }
+              
+              // Actualizar contadores de regla (localmente)
+              rule.runCount = (rule.runCount || 0) + 1;
+              rule.lastRun = new Date().toISOString();
+              rulesExecuted.push(rule);
+          }
+      });
+
+      // Guardar actualización de contadores
+      if (rulesExecuted.length > 0) {
+          const updatedRules = rules.map(r => {
+              const executed = rulesExecuted.find(ex => ex.id === r.id);
+              return executed || r;
+          });
+          localStorage.setItem('nocodepy_automation_rules', JSON.stringify(updatedRules));
+          showToast(`⚡ ${rulesExecuted.length} regla(s) de automatización ejecutada(s).`, 'success');
+      }
+
+      return actionsToApply;
+  };
+
+  // --- LOGGING SYSTEM ---
+  const logSystemEvent = (event, details) => {
+     console.log(`[SYSTEM LOG] ${new Date().toISOString()} - ${event}:`, details);
+     // Aquí se podría enviar a un endpoint de auditoría real
+  };
+
+  // Verificación periódica de integridad
+  useEffect(() => {
+      const interval = setInterval(() => {
+          if (cloudFiles.length > 0) {
+              logSystemEvent('INTEGRITY_CHECK', `Total Files: ${cloudFiles.length} (Active: ${activeFiles.length}, Trash: ${trashFiles.length})`);
+          }
+      }, 60000); // Cada minuto
+      return () => clearInterval(interval);
+  }, [cloudFiles, activeFiles.length, trashFiles.length]);
 
   const value = {
     data, setData, 
@@ -263,8 +465,13 @@ export function DataProvider({ children }) {
     logAction, undoLastAction, deleteAction, resetWorkspace, 
     toasts, showToast, removeToast,
     userTier, setUserTier, userEmail, planLimits: PLAN_LIMITS[userTier],
-    filesUploadedCount: uploadsUsed, cloudFiles, isLoadingFiles,
-    registerFile, canUploadNew, redirectToBilling // <-- Usamos la función de pago real
+    filesUploadedCount: totalFilesUsage, // Ahora mostramos el uso TOTAL real
+    cloudFiles: activeFiles, 
+    trashFiles, 
+    isLoadingFiles, refreshCloudFiles,
+    registerFile, updateExistingFile, deleteFile, restoreFile, permanentDeleteFile, canUploadNew, redirectToBilling,
+    checkAutomationRules, logSystemEvent,
+    projects, createProject, deleteProject, assignFileToProject
   };
 
   return (

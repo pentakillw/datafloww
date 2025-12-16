@@ -3,7 +3,7 @@ import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
   LayoutDashboard, Database, Wand2, BarChart3, 
   FileCode, Moon, Sun, LogOut, ChevronLeft, ChevronRight, ShieldCheck, Scale,
-  BookOpen, MonitorPlay, Crown, User, Sparkles
+  BookOpen, MonitorPlay, Crown, User, Sparkles, Zap, FolderOpen
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useData } from '../context/DataContext';
@@ -30,8 +30,10 @@ export default function Layout() {
 
   const menuItems = [
     { icon: <LayoutDashboard size={20} />, label: 'Dashboard', path: '/' },
+    { icon: <FolderOpen size={20} />, label: 'Proyectos', path: '/projects' }, // Nueva Sección
     { icon: <Database size={20} />, label: 'Datos', path: '/data' },
     { icon: <Wand2 size={20} />, label: 'Transformar', path: '/transform' },
+    { icon: <Zap size={20} />, label: 'Automatización', path: '/automation' }, 
     { icon: <BarChart3 size={20} />, label: 'Análisis', path: '/analysis' },
     { icon: <FileCode size={20} />, label: 'Exportar', path: '/export' },
     { icon: <MonitorPlay size={20} />, label: 'Instalación', path: '/guide' },

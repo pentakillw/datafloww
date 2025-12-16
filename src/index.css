@@ -1,12 +1,18 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+@config "../tailwind.config.js";
 
 @layer base {
+  html {
+    font-family: 'Inter', sans-serif;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Outfit', sans-serif;
+  }
   body {
-    /* MODO CLARO: Fondo gris muy suave (zinc-50), Texto gris oscuro (gray-900) */
+    /* MODO CLARO: Fondo gris muy suave (zinc-50), Texto primario legible (#333) */
     /* MODO OSCURO: Fondo Carbon, Texto Zinc */
-    @apply font-sans antialiased text-gray-900 dark:text-zinc bg-gray-50 dark:bg-carbon transition-colors duration-300;
+    @apply font-sans antialiased text-primary dark:text-zinc bg-gray-50 dark:bg-carbon transition-colors duration-300;
   }
 }
 

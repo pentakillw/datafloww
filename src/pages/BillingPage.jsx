@@ -5,7 +5,7 @@ import { useData } from '../context/DataContext';
 
 export default function BillingPage() {
     const navigate = useNavigate();
-    const { showToast, redirectToBilling } = useData();
+    const { redirectToBilling } = useData();
 
     // Esta página solo existe para simular el destino de la redirección de pago
     // En un entorno real, esta sería una página que carga widgets de Stripe.

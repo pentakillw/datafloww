@@ -11,6 +11,8 @@ import DataWorkspace from './pages/DataWorkspace';
 import TransformationStudio from './pages/TransformationStudio';
 import AnalysisDashboard from './pages/AnalysisDashboard';
 import ExportHub from './pages/ExportHub';
+import AutomationHub from './pages/AutomationHub';
+import ProjectsHub from './pages/ProjectsHub';
 import DocsPage from './pages/DocsPage';
 import InstallGuide from './pages/InstallGuide';
 
@@ -59,6 +61,8 @@ export default function App() {
           <Route path="/data" element={<DataWorkspace />} />
           <Route path="/transform" element={<TransformationStudio />} />
           <Route path="/analysis" element={<AnalysisDashboard />} />
+          <Route path="/automation" element={<AutomationHub />} />
+          <Route path="/projects" element={<ProjectsHub />} />
           <Route path="/export" element={<ExportHub />} />
           <Route path="/docs" element={<DocsPage />} />
           <Route path="/guide" element={<InstallGuide />} />
