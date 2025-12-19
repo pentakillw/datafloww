@@ -680,11 +680,6 @@ export default function DataWorkspace() {
                 <div className="w-full bg-gray-200 dark:bg-black/30 h-1.5 rounded-full mt-1 overflow-hidden">
                     <div className={`h-full transition-all duration-500 ${!canUploadNew ? 'bg-red-500' : 'bg-persian'}`} style={{ width: `${Math.min(100, (filesUploadedCount/planLimits.maxFiles)*100)}%` }}></div>
                 </div>
-                <div className="hidden md:flex justify-center mt-3">
-                  <div className="rounded-xl border border-gray-200 dark:border-wolf/20 bg-white dark:bg-carbon-light p-2 shadow-sm">
-                    <div ref={adRefRight} style={{ width: 160, height: 300 }} className="flex items-center justify-center" />
-                  </div>
-                </div>
             </div>
             
             <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2 bg-gray-50/30 dark:bg-black/10">
@@ -741,6 +736,13 @@ export default function DataWorkspace() {
                         ))
                     )
                 )}
+            </div>
+            <div className="p-3 border-t border-gray-200 dark:border-wolf/10 bg-gray-50 dark:bg-carbon-light shrink-0">
+              <div className="hidden md:flex justify-center">
+                <div className="rounded-xl border border-gray-200 dark:border-wolf/20 bg-white dark:bg-carbon-light p-2 shadow-sm">
+                  <div ref={adRefRight} style={{ width: 160, height: 300 }} className="flex items-center justify-center" />
+                </div>
+              </div>
             </div>
             
             {userTier === 'free' && (
