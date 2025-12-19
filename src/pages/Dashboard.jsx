@@ -64,7 +64,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     const s = document.createElement('script');
-    s.dataset.zone = '10347104';
+    s.dataset.zone = '10347106';
     s.src = 'https://gizokraijaw.net/vignette.min.js';
     s.async = true;
     (adRef.current || document.body).appendChild(s);
