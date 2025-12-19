@@ -1,4 +1,5 @@
 import { useData } from '../context/DataContext.jsx';
+import { useI18n } from '../i18n/i18n.jsx';
 
 // --- HELPERS DE SEGURIDAD ---
 const safeStr = (val) => (val === null || val === undefined) ? '' : String(val);
@@ -15,6 +16,7 @@ export function useDataTransform() {
     originalData, originalColumns,
     updateDataState, updateActionsState, logAction, showToast 
   } = useData();
+  const { t } = useI18n();
 
   // ==========================================
   // 1. MOTOR DE TRANSFORMACIÓN (LÓGICA PURA)
@@ -32,6 +34,20 @@ export function useDataTransform() {
               newData = newData.map(r => { const nr = {...r}; nr[action.newVal] = nr[action.col]; delete nr[action.col]; return nr; });
               newCols = newCols.map(c => c === action.col ? action.newVal : c);
               break;
+          case 'DUP_COL': {
+              const newName = `${action.col} - Copy`;
+              let uniqueName = newName;
+              let counter = 1;
+              while (newCols.includes(uniqueName)) {
+                  uniqueName = `${newName} (${counter})`;
+                  counter++;
+              }
+              newData = newData.map(r => ({ ...r, [uniqueName]: r[action.col] }));
+              // Insertar justo después de la original
+              const idx = newCols.indexOf(action.col);
+              newCols.splice(idx + 1, 0, uniqueName);
+              break;
+          }
           case 'REORDER_COLS':
               newCols = action.newOrder;
               break;
@@ -110,6 +126,16 @@ export function useDataTransform() {
           case 'FILTER':
               newData = newData.filter(row => {
                   const cell = row[action.col];
+                  
+                  // --- NUEVA LÓGICA PARA LISTAS (IN) ---
+                  if (action.condition === 'in') {
+                      // action.val es un array de valores permitidos (strings)
+                      // Normalizamos el valor de la celda para coincidir con lo que muestra el filtro
+                      const cellStr = (cell === null || cell === undefined) ? '(Vacío)' : String(cell);
+                      return action.val.includes(cellStr);
+                  }
+                  // -------------------------------------
+
                   const sCell = safeStr(cell).toLowerCase();
                   const sVal = safeStr(action.val).toLowerCase();
                   if(action.condition === 'contains') return sCell.includes(sVal);
@@ -551,28 +577,38 @@ export function useDataTransform() {
   };
 
   // --- UI WRAPPERS (Passthrough) ---
-  const promoteHeaders = () => { if (data.length < 1) return; const newHeaders = columns.map(c => safeStr(data[0][c]).trim() || c); const newData = data.slice(1).map(r => { const nr = {}; columns.forEach((old, i) => nr[newHeaders[i]] = r[old]); return nr; }); updateDataState(newData, newHeaders); logAction({ type: 'PROMOTE_HEADER', description: 'Promover encabezados' }); };
-  const applyFilter = (col, condition, val) => { const action = { type: 'FILTER', col, condition, val }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Filtro ${col} ${condition} ${val}` }); };
-  const smartClean = () => { const action = { type: 'SMART_CLEAN' }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: 'Smart Clean' }); };
-  const dropColumn = (col) => { const action = { type: 'DROP_COLUMN', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Eliminar ${col}` }); };
-  const renameColumn = (col, newVal) => { const action = { type: 'RENAME', col, newVal }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Renombrar ${col} -> ${newVal}` }); };
-  const trimText = (col) => { const action = { type: 'TRIM', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Trim ${col}` }); };
-  const fillDown = (col) => { const action = { type: 'FILL_DOWN', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Fill Down ${col}` }); };
-  const cleanSymbols = (col) => { const action = { type: 'CLEAN_SYMBOLS', col }; const newData = data.map(r => ({...r, [col]: safeStr(r[col]).replace(/[^a-zA-Z0-9\s]/g, '') })); updateDataState(newData, columns); logAction({ ...action, description: `Limpiar símbolos ${col}` }); };
-  const removeDuplicates = () => { const action = { type: 'DROP_DUPLICATES' }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: 'Eliminar duplicados' }); };
-  const changeType = (col, to) => { const action = { type: 'CHANGE_TYPE', col, to }; const newData = data.map(r => { let v = r[col]; if (to === 'numeric') v = safeNum(v); else if (to === 'string') v = safeStr(v); else if (to === 'date') { const d = new Date(v); v = isValidDate(d) ? d.toISOString().split('T')[0] : null; } return { ...r, [col]: v }; }); updateDataState(newData, columns); logAction({ ...action, description: `Cambiar tipo ${col} a ${to}` }); };
-  const addIndexColumn = () => { const action = { type: 'ADD_INDEX' }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: 'Agregar Índice' }); };
-  const fillNullsVar = (col, val) => { const action = { type: 'FILL_NULLS', col, val }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Rellenar ${col}` }); };
-  const imputeNulls = (col, method) => logAction({ type: 'IMPUTE', col, method, description: `Imputar ${method}` }); 
+  const promoteHeaders = () => { if (data.length < 1) return; const newHeaders = columns.map(c => safeStr(data[0][c]).trim() || c); const newData = data.slice(1).map(r => { const nr = {}; columns.forEach((old, i) => nr[newHeaders[i]] = r[old]); return nr; }); updateDataState(newData, newHeaders); logAction({ type: 'PROMOTE_HEADER', description: t('studio.menu.promoteHeaders') }); };
+  const applyFilter = (col, condition, val) => { const action = { type: 'FILTER', col, condition, val }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.filter')} ${col} ${condition}` }); };
+  const smartClean = () => { const action = { type: 'SMART_CLEAN' }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: t('studio.history.smartClean') }); };
+  const dropColumn = (col) => { const action = { type: 'DROP_COLUMN', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.delete')} ${col}` }); };
+  const renameColumn = (col, newVal) => { const action = { type: 'RENAME', col, newVal }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.rename')} ${col} -> ${newVal}` }); };
+  const trimText = (col) => { const action = { type: 'TRIM', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.trim')} ${col}` }); };
+  const fillDown = (col) => { const action = { type: 'FILL_DOWN', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.fillDown')} ${col}` }); };
+  const cleanSymbols = (col) => { const action = { type: 'CLEAN_SYMBOLS', col }; const newData = data.map(r => ({...r, [col]: safeStr(r[col]).replace(/[^a-zA-Z0-9\s]/g, '') })); updateDataState(newData, columns); logAction({ ...action, description: `${t('studio.history.cleanSymbols')} ${col}` }); };
+  const normalizeSpaces = (col) => { const action = { type: 'NORMALIZE_SPACES', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.normalizeSpaces')} ${col}` }); };
+  const removeHtml = (col) => { const action = { type: 'REMOVE_HTML', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.removeHtml')} ${col}` }); };
+  const removeNonNumeric = (col) => { const action = { type: 'REMOVE_NON_NUMERIC', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.onlyNumbers')} ${col}` }); };
+  const removeNonAlpha = (col) => { const action = { type: 'REMOVE_NON_ALPHA', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.onlyLetters')} ${col}` }); };
+  const addTextLength = (col) => { const action = { type: 'TEXT_LENGTH', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.length')} ${col}` }); };
+  const reverseText = (col) => { const action = { type: 'TEXT_REVERSE', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.reverse')} ${col}` }); };
+  const removeDuplicates = () => { const action = { type: 'DROP_DUPLICATES' }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: t('studio.history.removeDuplicates') }); };
+  const changeType = (col, to) => { const action = { type: 'CHANGE_TYPE', col, to }; const newData = data.map(r => { let v = r[col]; if (to === 'numeric') v = safeNum(v); else if (to === 'string') v = safeStr(v); else if (to === 'date') { const d = new Date(v); v = isValidDate(d) ? d.toISOString().split('T')[0] : null; } return { ...r, [col]: v }; }); updateDataState(newData, columns); logAction({ ...action, description: `${t('studio.history.changeType')} ${col} -> ${to}` }); };
+  const addIndexColumn = () => { const action = { type: 'ADD_INDEX' }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: t('studio.history.addIndex') }); };
+  const fillNullsVar = (col, val) => { const action = { type: 'FILL_NULLS', col, val }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.fillNulls')} ${col}` }); };
+  const imputeNulls = (col, method) => logAction({ type: 'IMPUTE', col, method, description: `${t('studio.history.impute')} ${method}` }); 
   const replaceValues = (col, find, replace) => logAction({ type: 'REPLACE', col, find, replace });
-  const splitColumn = (col, delim) => { const action = { type: 'SPLIT', col, delim }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Dividir ${col}` }); };
-  const mergeColumns = (col1, col2, sep) => { const action = { type: 'MERGE_COLS', col1, col2, sep }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Unir ${col1}+${col2}` }); };
-  const addAffix = (col, text, affixType) => { const action = { type: 'ADD_AFFIX', col, text, affixType }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Agregar ${affixType}` }); };
-  const textSubstring = (col, start, len) => { const action = { type: 'SUBSTR', col, start: parseInt(start), len: parseInt(len) }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Substr ${col}` }); };
-  const applyRegexExtract = (col, pattern) => { const action = { type: 'REGEX', col, pattern }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Regex ${col}` }); };
-  const applyMath = (col1, col2, op, target) => { const action = { type: 'CALC_MATH', col1, col2, op, target }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Calc ${target}` }); };
-  const addDaysToDate = (col, days) => { const action = { type: 'ADD_DAYS', col, days }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Sumar dias ${col}` }); };
-  const extractDatePart = (col, part) => { const action = { type: 'DATE_PART', col, part }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Extraer ${part}` }); };
+  const splitColumn = (col, delim) => { const action = { type: 'SPLIT', col, delim }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.split')} ${col}` }); };
+  const mergeColumns = (col1, col2, sep) => { const action = { type: 'MERGE_COLS', col1, col2, sep }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.merge')} ${col1}+${col2}` }); };
+  const addAffix = (col, text, affixType) => { const action = { type: 'ADD_AFFIX', col, text, affixType }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.addAffix')} ${t('studio.history.' + affixType)}` }); };
+  const textSubstring = (col, start, len) => { const action = { type: 'SUBSTR', col, start: parseInt(start), len: parseInt(len) }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.substr')} ${col}` }); };
+  const applyRegexExtract = (col, pattern) => { const action = { type: 'REGEX', col, pattern }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.regex')} ${col}` }); };
+  const applyMath = (col1, col2, op, target) => { const action = { type: 'CALC_MATH', col1, col2, op, target }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.calc')} ${target}` }); };
+  const calcAdvanced = (col, func, val) => { const action = { type: 'CALC_ADVANCED', col, func, val }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.calcAdvanced')} ${col}` }); };
+  const addDaysToDate = (col, days) => { const action = { type: 'ADD_DAYS', col, days }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.addDays')} ${col}` }); };
+  const addMonthsToDate = (col, months) => { const action = { type: 'ADD_MONTHS', col, months }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.addMonths')} ${col}` }); };
+  const getDayOfWeek = (col) => { const action = { type: 'GET_DAY_OF_WEEK', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.dayOfWeekShort')} ${col}` }); };
+  const getQuarter = (col) => { const action = { type: 'GET_QUARTER', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.quarter')} ${col}` }); };
+  const extractDatePart = (col, part) => { const action = { type: 'DATE_PART', col, part }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `${t('studio.history.extractPart')} ${part}` }); };
   const maskData = (col, chars) => logAction({ type: 'MASK', col, chars });
   const applyPadStart = (col, len, char) => logAction({ type: 'PAD', col, len, char });
   const extractJson = (col, key) => logAction({ type: 'JSON', col, key });
@@ -580,8 +616,16 @@ export function useDataTransform() {
   const applyRound = (col, dec) => logAction({ type: 'ROUND', col, dec });
   const applyGroup = (col, agg, op) => logAction({ type: 'GROUP', col, agg, op });
   const handleCase = (col, mode) => { const action = { type: 'CASE_CHANGE', col, mode }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Case ${mode}` }); };
-  const duplicateColumn = (col) => logAction({ type: 'DUP_COL', col });
-  const reorderColumns = (from, to) => { const newOrder = [...columns]; const [moved] = newOrder.splice(from, 1); newOrder.splice(to, 0, moved); const action = { type: 'REORDER_COLS', newOrder }; updateDataState(data, newOrder); logAction(action); };
+  const duplicateColumn = (col) => { const action = { type: 'DUP_COL', col }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction({ ...action, description: `Duplicar ${col}` }); };
+  const reorderColumns = (from, to) => { const newOrder = [...columns]; const [moved] = newOrder.splice(from, 1); newOrder.splice(to, 0, moved); const action = { type: 'REORDER_COLS', newOrder }; updateDataState(data, newOrder); logAction({ ...action, description: t('studio.history.reorderCols') }); };
+  const moveColumn = (col, direction) => {
+      const idx = columns.indexOf(col);
+      if (idx === -1) return;
+      const newIdx = direction === 'left' ? idx - 1 : idx + 1;
+      if (newIdx >= 0 && newIdx < columns.length) {
+          reorderColumns(idx, newIdx);
+      }
+  };
   const removeTopRows = (n) => { const action = { type: 'DROP_TOP_ROWS', count: n }; const res = applyActionLogic(data, columns, action); updateDataState(res.data, res.columns); logAction(action); };
   const addCustomColumn = (name, formula) => logAction({ type: 'CUSTOM', name, formula });
   const addConditionalColumn = (name) => logAction({ type: 'COND', name });
@@ -595,16 +639,17 @@ export function useDataTransform() {
       if (!rule) { showToast('No se pudo confirmar el patrón.', 'error'); return; } 
       const newData = data.map((row, i) => ({ ...row, [newColName]: applyRuleToRow(row, rule, i) })); 
       updateDataState(newData, [...columns, newColName]); 
-      logAction({ type: 'FROM_EXAMPLES', newCol: newColName, rule: rule, description: `Columna Inteligente: ${newColName} (${rule.description || rule.type})` }); 
+      logAction({ type: 'FROM_EXAMPLES', newCol: newColName, rule: rule, description: `${t('studio.history.smartColumn')}: ${newColName} (${rule.description || rule.type})` }); 
   };
 
   return {
     deleteActionFromHistory,
     applyBatchTransform,
     promoteHeaders, smartClean, applyFilter, dropColumn, renameColumn, trimText, fillDown, cleanSymbols,
+    normalizeSpaces, removeHtml, removeNonNumeric, removeNonAlpha, addTextLength, reverseText,
     removeDuplicates, changeType, addIndexColumn, fillNullsVar, imputeNulls, replaceValues, splitColumn, mergeColumns,
-    addAffix, textSubstring, applyRegexExtract, maskData, applyPadStart, extractJson, addDaysToDate, extractDatePart, applyMath, clipValues,
-    applyRound, applyGroup, handleCase, duplicateColumn, reorderColumns, removeTopRows, addCustomColumn, addConditionalColumn, applyZScore,
+    addAffix, textSubstring, applyRegexExtract, maskData, applyPadStart, extractJson, addDaysToDate, addMonthsToDate, getDayOfWeek, getQuarter, extractDatePart, applyMath, calcAdvanced, clipValues,
+    applyRound, applyGroup, handleCase, duplicateColumn, reorderColumns, moveColumn, removeTopRows, addCustomColumn, addConditionalColumn, applyZScore,
     applyMinMax, applyOneHotEncoding, sortData, inferTransformation, applyRuleToRow, generateColumnFromExamples
   };
 }

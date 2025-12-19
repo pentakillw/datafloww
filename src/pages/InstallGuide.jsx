@@ -3,10 +3,12 @@ import {
   Terminal, Download, Play, CheckCircle2, 
   Monitor, Box, ChevronRight, Copy, Check 
 } from 'lucide-react';
+import { useI18n } from '../i18n/i18n.jsx';
 
 export default function InstallGuide() {
   const [copied, setCopied] = useState(false);
   const installCmd = "pip install pandas openpyxl numpy";
+  const { t } = useI18n();
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(installCmd);
@@ -21,10 +23,10 @@ export default function InstallGuide() {
         {/* Header */}
         <div className="p-8 border-b border-gray-200 dark:border-wolf/20 bg-white dark:bg-carbon-light">
            <h1 className="text-3xl font-bold text-gray-900 dark:text-zinc mb-2 flex items-center gap-3">
-             <Monitor className="text-persian" size={32} /> Guía de Ejecución
+             <Monitor className="text-persian" size={32} /> {t('guide.headerTitle')}
            </h1>
            <p className="text-gray-500 dark:text-wolf text-lg max-w-3xl">
-             Para ejecutar los scripts generados por <strong>NoCodePY</strong> en tu computadora, necesitas preparar tu entorno una única vez. Sigue estos 3 pasos.
+             {t('guide.headerSubtitle')}
            </p>
         </div>
 
@@ -34,31 +36,31 @@ export default function InstallGuide() {
           <section className="flex flex-col md:flex-row gap-8">
             <div className="md:w-1/3">
                <div className="text-persian font-black text-6xl opacity-20 mb-2">01</div>
-               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Instalar Python</h2>
+               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{t('guide.step1Title')}</h2>
                <p className="text-gray-500 dark:text-wolf text-sm leading-relaxed">
-                 Es el motor que hace funcionar el código. Sin él, tu computadora no entenderá el archivo .py.
+                 {t('guide.step1Desc')}
                </p>
                <a href="https://www.python.org/downloads/" target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors shadow-lg shadow-blue-500/20">
-                 <Download size={16}/> Descargar Python
+                 <Download size={16}/> {t('guide.downloadPython')}
                </a>
             </div>
             <div className="md:w-2/3 bg-gray-100 dark:bg-black/30 rounded-xl p-6 border border-gray-200 dark:border-wolf/10 relative overflow-hidden group">
                <div className="absolute top-4 right-4 bg-yellow-500/10 text-yellow-500 px-3 py-1 rounded-full text-xs font-bold border border-yellow-500/20 animate-pulse">
-                 ⚠️ MUY IMPORTANTE
+                 ⚠️ {t('guide.importantBadge')}
                </div>
-               <h3 className="font-bold text-gray-800 dark:text-zinc mb-4">Durante la instalación:</h3>
+               <h3 className="font-bold text-gray-800 dark:text-zinc mb-4">{t('guide.duringInstall')}</h3>
                <div className="space-y-4">
                  <div className="flex items-start gap-3">
                     <CheckCircle2 className="text-green-500 shrink-0 mt-0.5" />
                     <p className="text-sm text-gray-600 dark:text-gray-300">
-                      En la primera pantalla del instalador, debes marcar la casilla que dice: <br/>
+                      {t('guide.addPath')} <br/>
                       <span className="font-mono font-bold text-gray-900 dark:text-white bg-white dark:bg-white/10 px-1 rounded">Add Python to PATH</span>
                     </p>
                  </div>
                  <div className="flex items-start gap-3">
                     <CheckCircle2 className="text-green-500 shrink-0 mt-0.5" />
                     <p className="text-sm text-gray-600 dark:text-gray-300">
-                      Luego haz clic en "Install Now" y espera a que termine.
+                      {t('guide.installNow')}
                     </p>
                  </div>
                </div>
@@ -71,21 +73,21 @@ export default function InstallGuide() {
           <section className="flex flex-col md:flex-row gap-8">
             <div className="md:w-1/3">
                <div className="text-persian font-black text-6xl opacity-20 mb-2">02</div>
-               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Visual Studio Code</h2>
+               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{t('guide.step2Title')}</h2>
                <p className="text-gray-500 dark:text-wolf text-sm leading-relaxed">
-                 El editor de código estándar mundial. Aquí abrirás y ejecutarás tu script.
+                 {t('guide.step2Desc')}
                </p>
                <a href="https://code.visualstudio.com/download" target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 bg-blue-500 hover:bg-blue-400 text-white px-4 py-2 rounded-lg font-bold text-sm transition-colors shadow-lg shadow-blue-500/20">
-                 <Download size={16}/> Descargar VS Code
+                 <Download size={16}/> {t('guide.downloadVSCode')}
                </a>
             </div>
             <div className="md:w-2/3 bg-gray-100 dark:bg-black/30 rounded-xl p-6 border border-gray-200 dark:border-wolf/10">
-               <h3 className="font-bold text-gray-800 dark:text-zinc mb-4">Configuración rápida:</h3>
+               <h3 className="font-bold text-gray-800 dark:text-zinc mb-4">{t('guide.quickSetup')}</h3>
                <ol className="list-decimal list-inside space-y-2 text-sm text-gray-600 dark:text-gray-300">
-                 <li>Instala y abre VS Code.</li>
-                 <li>Ve al icono de extensiones (cuadritos a la izquierda).</li>
-                 <li>Busca <strong>"Python"</strong> (creada por Microsoft) e instálala.</li>
-                 <li>Esto habilitará el botón de "Play" <Play size={12} className="inline"/> para ejecutar tu código.</li>
+                 <li>{t('guide.step2Item1')}</li>
+                 <li>{t('guide.step2Item2')}</li>
+                 <li>{t('guide.step2Item3')}</li>
+                 <li>{t('guide.step2Item4')} <Play size={12} className="inline"/></li>
                </ol>
             </div>
           </section>
@@ -96,17 +98,17 @@ export default function InstallGuide() {
           <section className="flex flex-col md:flex-row gap-8">
             <div className="md:w-1/3">
                <div className="text-persian font-black text-6xl opacity-20 mb-2">03</div>
-               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Instalar Librerías</h2>
+               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{t('guide.step3Title')}</h2>
                <p className="text-gray-500 dark:text-wolf text-sm leading-relaxed">
-                 Tu script necesita herramientas especiales (Pandas, OpenPyXL) para leer Excel. Instálalas con un comando.
+                 {t('guide.step3Desc')}
                </p>
             </div>
             <div className="md:w-2/3">
                <div className="bg-[#1e1e1e] rounded-xl overflow-hidden border border-gray-700 shadow-2xl">
                  <div className="bg-[#252526] px-4 py-2 flex justify-between items-center border-b border-black/50">
-                    <span className="text-xs font-mono text-gray-400">Terminal (CMD o PowerShell)</span>
+                    <span className="text-xs font-mono text-gray-400">{t('guide.terminalLabel')}</span>
                     <button onClick={copyToClipboard} className="text-xs flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
-                      {copied ? <Check size={14}/> : <Copy size={14}/>} {copied ? 'Copiado' : 'Copiar'}
+                      {copied ? <Check size={14}/> : <Copy size={14}/>} {copied ? t('guide.copied') : t('guide.copy')}
                     </button>
                  </div>
                  <div className="p-6 font-mono text-sm text-green-400">
@@ -115,7 +117,7 @@ export default function InstallGuide() {
                  </div>
                </div>
                <p className="mt-3 text-xs text-gray-500 dark:text-wolf flex items-center gap-2">
-                 <Box size={14} /> Solo necesitas ejecutar esto una vez en tu terminal.
+                 <Box size={14} /> {t('guide.runOnceNote')}
                </p>
             </div>
           </section>
@@ -126,12 +128,12 @@ export default function InstallGuide() {
                <Play size={40} fill="currentColor" />
              </div>
              <div className="flex-1">
-               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">¡Todo listo!</h3>
+               <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{t('guide.readyTitle')}</h3>
                <p className="text-gray-600 dark:text-zinc text-sm">
-                 1. Descarga tu script desde <strong>Export Hub</strong>.<br/>
-                 2. Abre el archivo <code>.py</code> con VS Code.<br/>
-                 3. Presiona el botón de <strong>Play (▷)</strong> en la esquina superior derecha.<br/>
-                 4. ¡Tu aplicación automática se abrirá en una ventana nueva!
+                 1. {t('guide.readySteps1')}<br/>
+                 2. {t('guide.readySteps2')}<br/>
+                 3. {t('guide.readySteps3')}<br/>
+                 4. {t('guide.readySteps4')}
                </p>
              </div>
           </div>

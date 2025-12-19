@@ -1,6 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useData } from '../context/DataContext.jsx';
 import { useDataTransform } from '../hooks/useDataTransform.jsx';
+import ColumnFilter from '../components/ColumnFilter';
+import { useI18n } from '../i18n/i18n.jsx';
 import { 
   Filter, Trash2, ArrowDownAZ, Eraser, 
   Type, Undo2, History, XCircle, Search,
@@ -17,8 +19,9 @@ import {
 } from 'lucide-react';
 
 export default function TransformationStudio() {
-  const { data, columns, actions, undoLastAction, showToast } = useData();
+  const { data, columns, actions, undoLastAction, showToast, originalData, originalColumns } = useData();
   const transform = useDataTransform(); 
+  const { t } = useI18n();
   
   const [activeCol, setActiveCol] = useState(null);
   
@@ -69,7 +72,23 @@ export default function TransformationStudio() {
   const [groupAggCol, setGroupAggCol] = useState(''); 
   const [groupOp, setGroupOp] = useState('SUM');
   const [addDaysVal, setAddDaysVal] = useState('30');
+  const [addMonthsVal, setAddMonthsVal] = useState('1');
+  const [calcVal, setCalcVal] = useState('2');
   
+  // -- VIRTUALIZACIÓN / INFINITE SCROLL --
+  const [visibleRows, setVisibleRows] = useState(100);
+  const scrollContainerRef = useRef(null);
+
+  const handleScroll = (e) => {
+    const { scrollTop, clientHeight, scrollHeight } = e.target;
+    // Si estamos cerca del final (200px), cargamos más
+    if (scrollHeight - scrollTop - clientHeight < 200) {
+        if (visibleRows < data.length) {
+            setVisibleRows(prev => Math.min(prev + 100, data.length));
+        }
+    }
+  };
+
   // -- FILTROS --
   const [filterCondition, setFilterCondition] = useState('contains');
   const [filterValue, setFilterValue] = useState('');
@@ -109,6 +128,18 @@ export default function TransformationStudio() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [headerMenuOpen]);
+
+  const uniqueValuesForFilter = useMemo(() => {
+    const targetCol = headerMenuOpen || (activeModal === 'filter' ? activeCol : null);
+    if (!targetCol || !originalData || originalData.length === 0) return null;
+    const actionsExcludingTarget = actions.filter(a => !(a.type === 'FILTER' && a.col === targetCol));
+    try {
+      const { data: previewData } = transform.applyBatchTransform(originalData, originalColumns, actionsExcludingTarget);
+      return previewData.map(r => r[targetCol]);
+    } catch {
+      return null;
+    }
+  }, [headerMenuOpen, activeModal, activeCol, actions, originalData, originalColumns, transform]);
 
   const closeModal = () => {
     setActiveModal(null);
@@ -164,7 +195,7 @@ export default function TransformationStudio() {
   };
 
   const showColumnStats = () => {
-    if (!activeCol) return showToast('Selecciona columna', 'warning');
+    if (!activeCol) return showToast(t('studio.selectColumn'), 'warning');
     const vals = data.map(r => r[activeCol]);
     const numVals = vals.map(v => parseFloat(v)).filter(v => !isNaN(v) && isFinite(v));
     const notNulls = vals.filter(v => v !== null && v !== '');
@@ -223,8 +254,8 @@ export default function TransformationStudio() {
   if (!data || data.length === 0 || columns.length === 0) return (
     <div className="flex flex-col items-center justify-center h-full text-gray-400 dark:text-wolf opacity-60 animate-in fade-in">
       <LayoutList size={64} />
-      <h2 className="mt-4 text-xl font-bold">Sin datos cargados</h2>
-      <p className="text-sm">Ve a la pestaña "Datos" para cargar un archivo.</p>
+      <h2 className="mt-4 text-xl font-bold">{t('studio.noDataTitle')}</h2>
+      <p className="text-sm">{t('studio.noDataSubtitle')}</p>
     </div>
   );
 
@@ -236,58 +267,69 @@ export default function TransformationStudio() {
         {/* NAVBAR PRINCIPAL */}
         <div className="bg-white dark:bg-carbon-light border-b border-gray-200 dark:border-wolf/20 p-2 flex gap-2 items-center relative z-[60] flex-wrap shadow-sm rounded-t-xl select-none" ref={menuRef}>
           
-          <DropdownMenu label="Agregar Columna" icon={<PlusSquare size={16} className="text-persian" />} isOpen={openMenu === 'add_col'} onClick={() => toggleMenu('add_col')}>
-            <DropdownSectionTitle title="General" />
-            <DropdownItem icon={<Zap size={14} />} label="Columna a partir de los ejemplos" onClick={() => { setActiveModal('examples_col'); setOpenMenu(null); }} />
-            <DropdownItem icon={<FunctionSquare size={14} />} label="Columna personalizada" onClick={() => { setActiveModal('custom_col'); setOpenMenu(null); }} />
-            <DropdownSectionTitle title="Condicional y Estructura" />
-            <DropdownItem icon={<GitFork size={14} />} label="Columna condicional" onClick={() => { setActiveModal('conditional_col'); addCondRule(); setOpenMenu(null); }} />
-            <DropdownItem icon={<ListOrdered size={14} />} label="Columna de índice" onClick={() => { transform.addIndexColumn(); setOpenMenu(null); }} />
-            <DropdownItem icon={<Copy size={14} />} label="Duplicar columna" onClick={() => { transform.duplicateColumn(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
+          <DropdownMenu label={t('studio.top.addColumn')} icon={<PlusSquare size={16} className="text-persian" />} isOpen={openMenu === 'add_col'} onClick={() => toggleMenu('add_col')}>
+            <DropdownSectionTitle title={t('studio.menu.sections.general')} />
+            <DropdownItem icon={<Zap size={14} />} label={t('studio.menu.examplesColumn')} onClick={() => { setActiveModal('examples_col'); setOpenMenu(null); }} />
+            <DropdownItem icon={<FunctionSquare size={14} />} label={t('studio.menu.customColumn')} onClick={() => { setActiveModal('custom_col'); setOpenMenu(null); }} />
+            <DropdownSectionTitle title={t('studio.menu.sections.conditionalStructure')} />
+            <DropdownItem icon={<GitFork size={14} />} label={t('studio.menu.conditionalColumn')} onClick={() => { setActiveModal('conditional_col'); addCondRule(); setOpenMenu(null); }} />
+            <DropdownItem icon={<ListOrdered size={14} />} label={t('studio.menu.indexColumn')} onClick={() => { transform.addIndexColumn(); setOpenMenu(null); }} />
+            <DropdownItem icon={<Copy size={14} />} label={t('studio.menu.duplicateColumn')} onClick={() => { transform.duplicateColumn(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
           </DropdownMenu>
 
-          <DropdownMenu label="Transformar" icon={<TableProperties size={16} />} isOpen={openMenu === 'structure'} onClick={() => toggleMenu('structure')}>
-            <DropdownSectionTitle title="Tabla" />
-            <DropdownItem icon={<ArrowUp size={14} />} label="Promover Encabezados" onClick={() => { transform.promoteHeaders(); setOpenMenu(null); }} />
-            <DropdownItem icon={<Trash2 size={14} />} label="Eliminar Filas Sup..." onClick={() => setActiveModal('dropRows')} danger />
-            <DropdownItem icon={<XCircle size={14} />} label="Eliminar Columna" onClick={() => { transform.dropColumn(activeCol); setOpenMenu(null); }} disabled={!activeCol} danger />
-            <DropdownSectionTitle title="Acciones" />
-            <DropdownItem icon={<Edit3 size={14} />} label="Renombrar Columna..." onClick={() => { setNewName(activeCol); setActiveModal('rename'); }} disabled={!activeCol} />
-            <DropdownItem icon={<ArrowRightLeft size={14} />} label="Cambiar Tipo de Dato..." onClick={() => setActiveModal('type')} disabled={!activeCol} />
+          <DropdownMenu label={t('studio.top.structure')} icon={<TableProperties size={16} />} isOpen={openMenu === 'structure'} onClick={() => toggleMenu('structure')}>
+            <DropdownSectionTitle title={t('studio.menu.sections.table')} />
+            <DropdownItem icon={<ArrowUp size={14} />} label={t('studio.menu.promoteHeaders')} onClick={() => { transform.promoteHeaders(); setOpenMenu(null); }} />
+            <DropdownItem icon={<Trash2 size={14} />} label={t('studio.menu.removeTopRows')} onClick={() => setActiveModal('dropRows')} danger />
+            <DropdownItem icon={<XCircle size={14} />} label={t('studio.menu.dropColumn')} onClick={() => { transform.dropColumn(activeCol); setOpenMenu(null); }} disabled={!activeCol} danger />
+            <DropdownSectionTitle title={t('studio.menu.sections.actions')} />
+            <DropdownItem icon={<Edit3 size={14} />} label={t('studio.menu.renameColumn')} onClick={() => { setNewName(activeCol); setActiveModal('rename'); }} disabled={!activeCol} />
+            <DropdownItem icon={<ArrowRightLeft size={14} />} label={t('studio.menu.changeType')} onClick={() => setActiveModal('type')} disabled={!activeCol} />
           </DropdownMenu>
 
-          <DropdownMenu label="Limpieza" icon={<Wand2 size={16} />} isOpen={openMenu === 'cleaning'} onClick={() => toggleMenu('cleaning')}>
-            <DropdownSectionTitle title="Texto" />
-            <DropdownItem icon={<Scissors size={14} />} label="Trim (Espacios)" onClick={() => { transform.trimText(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
-            <DropdownItem icon={<Binary size={14} />} label="Limpiar Símbolos" onClick={() => { transform.cleanSymbols(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
-            <DropdownItem icon={<CaseUpper size={14} />} label="Nombre Propio" onClick={() => { transform.handleCase(activeCol, 'title'); setOpenMenu(null); }} disabled={!activeCol} />
-            <DropdownSectionTitle title="Valores" />
-            <DropdownItem icon={<Trash2 size={14} />} label="Eliminar Duplicados" onClick={() => { transform.removeDuplicates(); setOpenMenu(null); }} />
-            <DropdownItem icon={<ArrowDownToLine size={14} />} label="Rellenar Abajo (Fill)" onClick={() => { transform.fillDown(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
-            <DropdownItem icon={<Edit3 size={14} />} label="Rellenar Nulos..." onClick={() => setActiveModal('fillNulls')} disabled={!activeCol} />
+          <DropdownMenu label={t('studio.top.cleaning')} icon={<Wand2 size={16} />} isOpen={openMenu === 'cleaning'} onClick={() => toggleMenu('cleaning')}>
+            <DropdownSectionTitle title={t('studio.menu.sections.text')} />
+            <DropdownItem icon={<Scissors size={14} />} label={t('studio.menu.trimSpaces')} onClick={() => { transform.trimText(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
+            <DropdownItem icon={<Type size={14} />} label={t('studio.menu.normalizeSpaces')} onClick={() => { transform.normalizeSpaces(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
+            <DropdownItem icon={<Binary size={14} />} label={t('studio.menu.cleanSymbols')} onClick={() => { transform.cleanSymbols(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
+            <DropdownItem icon={<Code size={14} />} label={t('studio.menu.removeHtml')} onClick={() => { transform.removeHtml(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
+            <DropdownItem icon={<CaseUpper size={14} />} label={t('studio.menu.titleCase')} onClick={() => { transform.handleCase(activeCol, 'title'); setOpenMenu(null); }} disabled={!activeCol} />
+            <DropdownSectionTitle title={t('studio.menu.sections.charFilter')} />
+            <DropdownItem icon={<Hash size={14} />} label={t('studio.menu.onlyNumbers')} onClick={() => { transform.removeNonNumeric(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
+            <DropdownItem icon={<Type size={14} />} label={t('studio.menu.onlyLetters')} onClick={() => { transform.removeNonAlpha(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
+            <DropdownSectionTitle title={t('studio.menu.sections.values')} />
+            <DropdownItem icon={<Trash2 size={14} />} label={t('studio.menu.removeDuplicates')} onClick={() => { transform.removeDuplicates(); setOpenMenu(null); }} />
+            <DropdownItem icon={<ArrowDownToLine size={14} />} label={t('studio.menu.fillDown')} onClick={() => { transform.fillDown(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
+            <DropdownItem icon={<Edit3 size={14} />} label={t('studio.menu.fillNulls')} onClick={() => setActiveModal('fillNulls')} disabled={!activeCol} />
           </DropdownMenu>
 
-          <DropdownMenu label="Texto/Fecha" icon={<Type size={16} />} isOpen={openMenu === 'text'} onClick={() => toggleMenu('text')}>
-            <DropdownSectionTitle title="Texto" />
-            <DropdownItem icon={<Split size={14} />} label="Dividir Columna" onClick={() => setActiveModal('split')} disabled={!activeCol} />
-            <DropdownItem icon={<Combine size={14} />} label="Unir Columnas" onClick={() => setActiveModal('merge')} disabled={!activeCol} />
-            <DropdownItem icon={<Replace size={14} />} label="Reemplazar Valor" onClick={() => setActiveModal('replace')} disabled={!activeCol} />
-            <DropdownItem icon={<Code size={14} />} label="Extraer (Regex/Substr)" onClick={() => setActiveModal('regex')} disabled={!activeCol} />
-            <DropdownSectionTitle title="Fechas" />
-            <DropdownItem icon={<Calendar size={14} />} label="Extraer Año/Mes/Día" onClick={() => { transform.extractDatePart(activeCol, 'year'); setOpenMenu(null); }} disabled={!activeCol} />
-            <DropdownItem icon={<CalendarPlus size={14} />} label="Operar Fechas" onClick={() => setActiveModal('addDays')} disabled={!activeCol} />
+          <DropdownMenu label={t('studio.top.textDate')} icon={<Type size={16} />} isOpen={openMenu === 'text'} onClick={() => toggleMenu('text')}>
+            <DropdownSectionTitle title={t('studio.menu.sections.text')} />
+            <DropdownItem icon={<Scaling size={14} />} label={t('studio.menu.textLength')} onClick={() => { transform.addTextLength(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
+            <DropdownItem icon={<ArrowRightLeft size={14} />} label={t('studio.menu.reverseText')} onClick={() => { transform.reverseText(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
+            <DropdownItem icon={<Split size={14} />} label={t('studio.menu.splitColumn')} onClick={() => setActiveModal('split')} disabled={!activeCol} />
+            <DropdownItem icon={<Combine size={14} />} label={t('studio.menu.mergeColumns')} onClick={() => setActiveModal('merge')} disabled={!activeCol} />
+            <DropdownItem icon={<Replace size={14} />} label={t('studio.menu.replaceValue')} onClick={() => setActiveModal('replace')} disabled={!activeCol} />
+            <DropdownItem icon={<Code size={14} />} label={t('studio.menu.extractRegexSubstr')} onClick={() => setActiveModal('regex')} disabled={!activeCol} />
+            <DropdownSectionTitle title={t('studio.menu.sections.dates')} />
+            <DropdownItem icon={<Calendar size={14} />} label={t('studio.menu.extractDatePart')} onClick={() => { transform.extractDatePart(activeCol, 'year'); setOpenMenu(null); }} disabled={!activeCol} />
+            <DropdownItem icon={<Calendar size={14} />} label={t('studio.menu.dayOfWeek')} onClick={() => { transform.getDayOfWeek(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
+            <DropdownItem icon={<Calendar size={14} />} label={t('studio.menu.quarter')} onClick={() => { transform.getQuarter(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
+            <DropdownItem icon={<CalendarPlus size={14} />} label={t('studio.menu.addDaysMonths')} onClick={() => setActiveModal('dateOps')} disabled={!activeCol} />
           </DropdownMenu>
 
-          <DropdownMenu label="Cálculo" icon={<Calculator size={16} />} isOpen={openMenu === 'tools'} onClick={() => toggleMenu('tools')}>
-            <DropdownItem icon={<Calculator size={14} />} label="Operar (+ - * /)..." onClick={() => setActiveModal('math')} disabled={!activeCol} />
-            <DropdownItem icon={<Sigma size={14} />} label="Agrupar (Pivot)..." onClick={() => setActiveModal('group')} disabled={!activeCol} />
-            <DropdownItem icon={<Info size={14} />} label="Estadísticas" onClick={showColumnStats} disabled={!activeCol} />
+          <DropdownMenu label={t('studio.top.calc')} icon={<Calculator size={16} />} isOpen={openMenu === 'tools'} onClick={() => toggleMenu('tools')}>
+            <DropdownItem icon={<Calculator size={14} />} label={t('studio.menu.mathOps')} onClick={() => setActiveModal('math')} disabled={!activeCol} />
+            <DropdownSectionTitle title={t('studio.menu.sections.advanced')} />
+            <DropdownItem icon={<Calculator size={14} />} label={t('studio.menu.absRound')} onClick={() => setActiveModal('calcAdvanced')} disabled={!activeCol} />
+            <DropdownItem icon={<Sigma size={14} />} label={t('studio.menu.groupPivot')} onClick={() => setActiveModal('group')} disabled={!activeCol} />
+            <DropdownItem icon={<Info size={14} />} label={t('studio.menu.stats')} onClick={showColumnStats} disabled={!activeCol} />
           </DropdownMenu>
 
-          <DropdownMenu label="Data Science" icon={<BrainCircuit size={16} />} isOpen={openMenu === 'ds'} onClick={() => toggleMenu('ds')}>
-            <DropdownItem icon={<BarChart4 size={14} />} label="Z-Score (Anomalías)" onClick={() => { transform.applyZScore(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
-            <DropdownItem icon={<Scaling size={14} />} label="Normalizar (0-1)" onClick={() => { transform.applyMinMax(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
-            <DropdownItem icon={<TrendingUp size={14} />} label="One-Hot Encoding" onClick={() => { transform.applyOneHotEncoding(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
+          <DropdownMenu label={t('studio.top.ds')} icon={<BrainCircuit size={16} />} isOpen={openMenu === 'ds'} onClick={() => toggleMenu('ds')}>
+            <DropdownItem icon={<BarChart4 size={14} />} label={t('studio.menu.zscore')} onClick={() => { transform.applyZScore(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
+            <DropdownItem icon={<Scaling size={14} />} label={t('studio.menu.normalize01')} onClick={() => { transform.applyMinMax(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
+            <DropdownItem icon={<TrendingUp size={14} />} label={t('studio.menu.oneHot')} onClick={() => { transform.applyOneHotEncoding(activeCol); setOpenMenu(null); }} disabled={!activeCol} />
           </DropdownMenu>
           
           <div className="h-6 w-px bg-gray-300 dark:bg-wolf/20 mx-1"></div>
@@ -308,7 +350,7 @@ export default function TransformationStudio() {
           
           {!historyOpen && (
              <button onClick={() => setHistoryOpen(true)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold uppercase text-gray-500 hover:text-persian bg-gray-100 dark:bg-wolf/10 transition-colors border border-transparent hover:border-persian/20">
-               <History size={14} /> Historial
+               <History size={14} /> {t('studio.historyTitle')}
              </button>
           )}
         </div>
@@ -317,67 +359,32 @@ export default function TransformationStudio() {
         
         {headerMenuOpen && (
             <div 
-                className="floating-menu-container fixed bg-white dark:bg-[#1a1a1a] rounded-lg shadow-2xl border border-gray-200 dark:border-wolf/20 z-[9999] flex flex-col py-1 text-gray-700 dark:text-zinc text-xs font-normal normal-case tracking-normal animate-in fade-in zoom-in-95 duration-200 cursor-default w-48"
+                className="floating-menu-container fixed z-[9999]"
                 style={{ top: headerMenuPos.top, left: headerMenuPos.left }}
-                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => e.stopPropagation()} 
             >
-                <div className="px-3 py-2 text-[10px] uppercase text-gray-400 font-bold tracking-wider bg-gray-50 dark:bg-black/20 mb-1 border-b border-gray-100 dark:border-wolf/10 truncate">
-                    Columna: {headerMenuOpen}
-                </div>
-
-                <button onClick={() => { transform.sortData(headerMenuOpen, 'asc'); setHeaderMenuOpen(null); }} className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-wolf/10 flex items-center gap-2 text-left">
-                  <ArrowDownAZ size={14} className="text-gray-400" /> Ordenar A-Z
-                </button>
-                <button onClick={() => { transform.sortData(headerMenuOpen, 'desc'); setHeaderMenuOpen(null); }} className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-wolf/10 flex items-center gap-2 text-left">
-                  <ArrowUpAZ size={14} className="text-gray-400" /> Ordenar Z-A
-                </button>
-                
-                <div className="border-t border-gray-100 dark:border-wolf/10 my-1"></div>
-                
-                <button onClick={() => { transform.moveColumn(headerMenuOpen, 'left'); setHeaderMenuOpen(null); }} className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-wolf/10 flex items-center gap-2 text-left">
-                  <ArrowLeft size={14} className="text-gray-400" /> Mover Izquierda
-                </button>
-                <button onClick={() => { transform.moveColumn(headerMenuOpen, 'right'); setHeaderMenuOpen(null); }} className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-wolf/10 flex items-center gap-2 text-left">
-                  <ArrowRight size={14} className="text-gray-400" /> Mover Derecha
-                </button>
-                
-                <button onClick={() => { transform.duplicateColumn(headerMenuOpen); setHeaderMenuOpen(null); }} className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-wolf/10 flex items-center gap-2 text-left">
-                  <Copy size={14} className="text-gray-400" /> Duplicar Columna
-                </button>
-
-                <div className="border-t border-gray-100 dark:border-wolf/10 my-1"></div>
-                
-                <button onClick={() => { setActiveModal('filter'); setHeaderMenuOpen(null); }} className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-wolf/10 flex items-center gap-2 text-left font-medium text-persian">
-                  <Filter size={14} /> Filtrar...
-                </button>
-                
-                <div className="border-t border-gray-100 dark:border-wolf/10 my-1"></div>
-
-                <button onClick={() => { setNewName(headerMenuOpen); setActiveModal('rename'); setHeaderMenuOpen(null); }} className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-wolf/10 flex items-center gap-2 text-left">
-                  <Edit3 size={14} className="text-gray-400" /> Renombrar
-                </button>
-                <button onClick={() => { setActiveModal('type'); setHeaderMenuOpen(null); }} className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-wolf/10 flex items-center gap-2 text-left">
-                  <ArrowRightLeft size={14} className="text-gray-400" /> Cambiar Tipo
-                </button>
-                <button onClick={showColumnStats} className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-wolf/10 flex items-center gap-2 text-left">
-                  <Info size={14} className="text-gray-400" /> Estadísticas
-                </button>
-
-                <div className="border-t border-gray-100 dark:border-wolf/10 my-1"></div>
-                
-                <div className="px-3 py-1 text-[10px] uppercase text-gray-400 font-bold tracking-wider">Limpieza Rápida</div>
-                <button onClick={() => { transform.fillDown(headerMenuOpen); setHeaderMenuOpen(null); }} className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-wolf/10 flex items-center gap-2 text-left">
-                  <ArrowDownToLine size={14} className="text-gray-400" /> Rellenar Abajo
-                </button>
-                <button onClick={() => { transform.trimText(headerMenuOpen); setHeaderMenuOpen(null); }} className="px-3 py-2 hover:bg-gray-100 dark:hover:bg-wolf/10 flex items-center gap-2 text-left">
-                  <Scissors size={14} className="text-gray-400" /> Trim Espacios
-                </button>
-
-                <div className="border-t border-gray-100 dark:border-wolf/10 my-1"></div>
-
-                <button onClick={() => { transform.dropColumn(headerMenuOpen); setHeaderMenuOpen(null); }} className="px-3 py-2 hover:bg-red-50 dark:hover:bg-red-900/10 flex items-center gap-2 text-left text-red-500">
-                  <Trash2 size={14} /> Eliminar Columna
-                </button>
+                <ColumnFilter 
+                    data={data} 
+                    column={headerMenuOpen} 
+                    uniqueValues={uniqueValuesForFilter}
+                    onClose={() => setHeaderMenuOpen(null)}
+                    onApply={(selectedValues) => {
+                        transform.applyFilter(headerMenuOpen, 'in', selectedValues);
+                        setHeaderMenuOpen(null);
+                    }}
+                    onSortAsc={() => { transform.sortData(headerMenuOpen, 'asc'); setHeaderMenuOpen(null); }}
+                    onSortDesc={() => { transform.sortData(headerMenuOpen, 'desc'); setHeaderMenuOpen(null); }}
+                    onMoveLeft={() => { transform.moveColumn(headerMenuOpen, 'left'); setHeaderMenuOpen(null); }}
+                    onMoveRight={() => { transform.moveColumn(headerMenuOpen, 'right'); setHeaderMenuOpen(null); }}
+                    onRename={() => { setNewName(headerMenuOpen); setActiveModal('rename'); setHeaderMenuOpen(null); }}
+                    onChangeType={() => { setActiveModal('type'); setHeaderMenuOpen(null); }}
+                    onStats={showColumnStats}
+                    onDuplicate={() => { transform.duplicateColumn(headerMenuOpen); setHeaderMenuOpen(null); }}
+                    onDrop={() => { transform.dropColumn(headerMenuOpen); setHeaderMenuOpen(null); }}
+                    onFillDown={() => { transform.fillDown(headerMenuOpen); setHeaderMenuOpen(null); }}
+                    onTrim={() => { transform.trimText(headerMenuOpen); setHeaderMenuOpen(null); }}
+                />
             </div>
         )}
 
@@ -404,7 +411,7 @@ export default function TransformationStudio() {
                                 <tr>
                                     <th className="p-2 text-xs font-bold border border-gray-200 dark:border-wolf/10 w-10 text-center">#</th>
                                     {columns.map(c => (<th key={c} className={`p-2 text-xs font-bold border border-gray-200 dark:border-wolf/10 text-gray-500 ${scanScope === 'selection' && activeCol === c ? 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-600' : ''} ${scanScope === 'selection' && activeCol !== c ? 'opacity-30' : ''}`}>{c}</th>))}
-                                    <th className="p-2 text-xs font-bold border border-gray-200 dark:border-wolf/10 bg-persian/10 text-persian w-48 border-l-2 border-l-persian">Columna 1 (Ejemplos)</th>
+                                    <th className="p-2 text-xs font-bold border border-gray-200 dark:border-wolf/10 bg-persian/10 text-persian w-48 border-l-2 border-l-persian">{t('studio.menu.examplesColumn')}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -418,30 +425,32 @@ export default function TransformationStudio() {
                             </tbody>
                         </table>
                     </div>
-                    <div className="p-4 border-t border-gray-200 dark:border-wolf/10 flex justify-between items-center bg-gray-50 dark:bg-white/5 rounded-b-xl">
-                        {/* FEEDBACK MEJORADO */}
-                        <div className="text-xs">{inferredRule ? <span className="text-green-600 font-bold flex items-center gap-2"><CheckCircle2 size={14}/> Patrón: {inferredRule.description || inferredRule.type}</span> : <span className="text-gray-400">Escribe al menos 1 o 2 ejemplos...</span>}</div>
-                        <div className="flex gap-2"><button onClick={closeModal} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/10 rounded-lg">Cancelar</button><button onClick={() => { transform.generateColumnFromExamples(customColName, exampleMap); closeModal(); }} disabled={!inferredRule} className="btn-primary-sm">Aceptar</button></div>
-                    </div>
+                        <div className="p-4 border-t border-gray-200 dark:border-wolf/10 flex justify-between items-center bg-gray-50 dark:bg-white/5 rounded-b-xl">
+                        <div className="text-xs">{inferredRule ? <span className="text-green-600 font-bold flex items-center gap-2"><CheckCircle2 size={14}/> {t('studio.patternLabel')}: {inferredRule.description || inferredRule.type}</span> : <span className="text-gray-400">{t('studio.examplesHint')}</span>}</div>
+                        <div className="flex gap-2"><button onClick={closeModal} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-white/10 rounded-lg">{t('common.cancel')}</button><button onClick={() => { transform.generateColumnFromExamples(customColName, exampleMap); closeModal(); }} disabled={!inferredRule} className="btn-primary-sm">{t('common.accept')}</button></div>
+                        </div>
                 </div>
             </div>
         )}
 
-        {/* MODAL RAPIDO: FILTRO */}
-        {activeModal === 'filter' && <ModalBar title={`Filtrar: ${activeCol}`} onClose={closeModal}>
-            <select className="input-dark w-32" value={filterCondition} onChange={e => setFilterCondition(e.target.value)}>
-                <option value="contains">Contiene</option>
-                <option value="equals">Igual a</option>
-                <option value="starts_with">Empieza con</option>
-                <option value="greater">Mayor que</option>
-                <option value="less">Menor que</option>
-                <option value="empty">Vacío</option>
-            </select>
-            {filterCondition !== 'empty' && (
-                <input type="text" className="input-dark w-32" value={filterValue} onChange={e => setFilterValue(e.target.value)} placeholder="Valor..." autoFocus />
-            )}
-            <button onClick={() => { transform.applyFilter(activeCol, filterCondition, filterValue); closeModal(); }} className="btn-primary-sm">Aplicar</button>
-        </ModalBar>}
+        {/* MODAL FILTRO AVANZADO (TIPO EXCEL) */}
+        {activeModal === 'filter' && (
+            <div 
+                className="fixed inset-0 z-[100] flex items-center justify-center bg-black/20 backdrop-blur-[2px] animate-in fade-in duration-200"
+                onClick={closeModal}
+            >
+                <ColumnFilter 
+                    data={data} 
+                    column={activeCol} 
+                    uniqueValues={uniqueValuesForFilter}
+                    onClose={closeModal}
+                    onApply={(selectedValues) => {
+                        transform.applyFilter(activeCol, 'in', selectedValues);
+                        closeModal();
+                    }}
+                />
+            </div>
+        )}
 
         {/* OTROS MODALES */}
         {activeModal === 'rename' && <ModalBar title="Renombrar" onClose={closeModal}><input type="text" className="input-dark w-48" value={newName} onChange={e => setNewName(e.target.value)} autoFocus /><button onClick={() => { transform.renameColumn(activeCol, newName); closeModal(); }} className="btn-primary-sm">Guardar</button></ModalBar>}
@@ -459,7 +468,9 @@ export default function TransformationStudio() {
         {activeModal === 'pad' && <ModalBar title="Pad (Ceros)" onClose={closeModal}><span className="text-xs">Len:</span><input type="number" className="input-dark w-12" value={padLen} onChange={e=>setPadLen(e.target.value)} /><span className="text-xs">Char:</span><input type="text" className="input-dark w-8 text-center" value={padChar} onChange={e=>setPadChar(e.target.value)} /><button onClick={() => { transform.applyPadStart(activeCol, padLen, padChar); closeModal(); }} className="btn-primary-sm">Rellenar</button></ModalBar>}
         {activeModal === 'json' && <ModalBar title="JSON Extract" onClose={closeModal}><input type="text" className="input-dark w-32" value={jsonKey} onChange={e => setJsonKey(e.target.value)} placeholder="Key (ej: id)" /><button onClick={() => { transform.extractJson(activeCol, jsonKey); closeModal(); }} className="btn-primary-sm">Extraer</button></ModalBar>}
         {activeModal === 'addDays' && <ModalBar title="Sumar Días" onClose={closeModal}><input type="number" className="input-dark w-20" value={addDaysVal} onChange={e=>setAddDaysVal(e.target.value)} /><button onClick={() => { transform.addDaysToDate(activeCol, addDaysVal); closeModal(); }} className="btn-primary-sm">Sumar</button></ModalBar>}
+        {activeModal === 'dateOps' && <ModalBar title="Operar Fechas" onClose={closeModal}><span className="text-xs">Sumar:</span><input type="number" className="input-dark w-16" value={addDaysVal} onChange={e=>setAddDaysVal(e.target.value)} placeholder="Días" /><button onClick={() => { transform.addDaysToDate(activeCol, addDaysVal); closeModal(); }} className="btn-primary-sm px-2">D</button><input type="number" className="input-dark w-16 ml-2" value={addMonthsVal} onChange={e=>setAddMonthsVal(e.target.value)} placeholder="Meses" /><button onClick={() => { transform.addMonthsToDate(activeCol, addMonthsVal); closeModal(); }} className="btn-primary-sm px-2">M</button></ModalBar>}
         {activeModal === 'math' && <ModalBar title="Cálculo" onClose={closeModal}><input type="text" placeholder="Nom. Columna" className="input-dark w-24" value={mathTarget} onChange={e => setMathTarget(e.target.value)} /><span className="text-xs">= {activeCol}</span><select className="input-dark w-10 text-center font-bold" value={mathOp} onChange={e => setMathOp(e.target.value)}><option value="+">+</option><option value="-">-</option><option value="*">*</option><option value="/">/</option></select><select className="input-dark w-24" value={mathCol2} onChange={e => setMathCol2(e.target.value)}>{columns.map(c=><option key={c} value={c}>{c}</option>)}</select><button onClick={() => { transform.applyMath(activeCol, mathCol2, mathOp, mathTarget); closeModal(); }} className="btn-primary-sm">Calc</button></ModalBar>}
+        {activeModal === 'calcAdvanced' && <ModalBar title="Calc. Avanzado" onClose={closeModal}><select className="input-dark w-32" onChange={(e) => { const f = e.target.value; if(['ABS','FLOOR','CEIL','SQRT','LOG'].includes(f)) { transform.calcAdvanced(activeCol, f); closeModal(); } else { setTargetType(f); } }}><option value="">Seleccionar...</option><option value="ABS">Valor Absoluto</option><option value="FLOOR">Piso (Floor)</option><option value="CEIL">Techo (Ceil)</option><option value="SQRT">Raíz Cuadrada</option><option value="LOG">Logaritmo (Ln)</option><option value="POWER">Potencia (^)</option><option value="MOD">Módulo (%)</option></select>{['POWER','MOD'].includes(targetType) && <><input type="number" className="input-dark w-16" value={calcVal} onChange={e=>setCalcVal(e.target.value)} /><button onClick={() => { transform.calcAdvanced(activeCol, targetType, calcVal); closeModal(); }} className="btn-primary-sm">Aplicar</button></>}</ModalBar>}
         {activeModal === 'clip' && <ModalBar title="Limitar (Clip)" onClose={closeModal}><span className="text-xs">Min:</span><input type="number" className="input-dark w-14" value={clipMin} onChange={e=>setClipMin(e.target.value)} /><span className="text-xs">Max:</span><input type="number" className="input-dark w-14" value={clipMax} onChange={e=>setClipMax(e.target.value)} /><button onClick={() => { transform.clipValues(activeCol, clipMin, clipMax); closeModal(); }} className="btn-primary-sm">Aplicar</button></ModalBar>}
         {activeModal === 'round' && <ModalBar title="Redondear" onClose={closeModal}><span className="text-xs">Decimales:</span><input type="number" className="input-dark w-12" value={roundDecimals} onChange={e=>setRoundDecimals(e.target.value)} /><button onClick={() => { transform.applyRound(activeCol, roundDecimals); closeModal(); }} className="btn-primary-sm">Aplicar</button></ModalBar>}
         {activeModal === 'group' && <ModalBar title="Agrupar" onClose={closeModal}><select className="input-dark w-20" value={groupOp} onChange={e => setGroupOp(e.target.value)}><option value="SUM">Sumar</option><option value="AVG">Prom</option><option value="COUNT">Contar</option><option value="MAX">Max</option><option value="MIN">Min</option></select><select className="input-dark w-24" value={groupAggCol} onChange={e => setGroupAggCol(e.target.value)}>{columns.map(c=><option key={c} value={c}>{c}</option>)}</select><button onClick={() => { transform.applyGroup(activeCol, groupAggCol, groupOp); closeModal(); }} className="btn-primary-sm">Agrupar</button></ModalBar>}
@@ -506,17 +517,17 @@ export default function TransformationStudio() {
         {activeModal === 'custom_col' && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                 <div className="bg-white dark:bg-[#1a1a1a] rounded-xl shadow-2xl w-full max-w-2xl border border-gray-200 dark:border-wolf/20 flex flex-col max-h-[90vh]">
-                    <div className="p-4 border-b border-gray-200 dark:border-wolf/10 flex justify-between items-center">
-                        <h3 className="font-bold text-lg dark:text-white flex items-center gap-2"><FunctionSquare size={20} className="text-persian"/> Columna Personalizada</h3>
-                        <button onClick={closeModal}><X className="text-gray-400 hover:text-red-500" /></button>
-                    </div>
-                    <div className="p-6 overflow-y-auto space-y-4">
-                        <div>
-                            <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Nombre de la nueva columna</label>
-                            <input type="text" className="input-dark" value={customColName} onChange={e => setCustomColName(e.target.value)} />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold uppercase text-gray-500 mb-1">Fórmula de columna personalizada</label>
+            <div className="p-4 border-b border-gray-200 dark:border-wolf/10 flex justify-between items-center">
+                <h3 className="font-bold text-lg dark:text-white flex items-center gap-2"><FunctionSquare size={20} className="text-persian"/> {t('studio.customColTitle')}</h3>
+                <button onClick={closeModal}><X className="text-gray-400 hover:text-red-500" /></button>
+            </div>
+            <div className="p-6 overflow-y-auto space-y-4">
+                <div>
+                    <label className="block text-xs font-bold uppercase text-gray-500 mb-1">{t('studio.customColNameLabel')}</label>
+                    <input type="text" className="input-dark" value={customColName} onChange={e => setCustomColName(e.target.value)} />
+                </div>
+                <div>
+                    <label className="block text-xs font-bold uppercase text-gray-500 mb-1">{t('studio.customColFormulaLabel')}</label>
                             <div className="flex gap-4 h-64">
                                 <div className="w-1/3 border border-gray-200 dark:border-wolf/10 rounded-lg overflow-hidden flex flex-col">
                                     <div className="bg-gray-100 dark:bg-white/5 p-2 text-xs font-bold text-center border-b border-gray-200 dark:border-wolf/10">Columnas Disponibles</div>
@@ -564,27 +575,32 @@ export default function TransformationStudio() {
         )}
 
         {/* --- DATAGRID (TABLA PRINCIPAL) --- */}
-        <div className="flex-1 overflow-auto relative custom-scrollbar bg-white dark:bg-carbon-light z-0 rounded-b-xl">
+        <div 
+            className="flex-1 overflow-auto relative custom-scrollbar bg-white dark:bg-carbon-light z-0 rounded-b-xl"
+            onScroll={handleScroll}
+            ref={scrollContainerRef}
+        >
           <table className="w-full text-left border-collapse">
             <thead className="bg-gray-100 dark:bg-carbon sticky top-0 z-10 shadow-sm">
               <tr>
-                <th className={`w-12 text-center text-xs font-medium text-gray-500 border-b border-gray-200 dark:border-wolf/20 ${compactMode ? 'p-1' : 'p-3'}`}>#</th>
+                <th className={`w-12 text-center text-[10px] md:text-xs font-medium text-gray-500 border-b border-gray-200 dark:border-wolf/20 ${compactMode ? 'p-1' : 'p-2 md:p-3'}`}>#</th>
                 {columns.map((col, idx) => {
                   return (
                     <th 
                       key={idx} 
                       onClick={() => setActiveCol(col)} 
+                      onDoubleClick={() => { setNewName(col); setActiveModal('rename'); }}
                       draggable
                       onDragStart={(e) => handleDragStart(e, idx)}
                       onDragOver={(e) => handleDragOver(e, idx)}
                       onDragEnd={handleDragEnd}
                       onDrop={(e) => handleDrop(e, idx)}
-                      className={`relative group cursor-pointer transition-colors border-b border-gray-200 dark:border-wolf/20 ${compactMode ? 'p-2' : 'p-3'} ${activeCol === col ? 'bg-persian/10 text-persian border-b-2 border-persian' : 'hover:bg-gray-200 dark:hover:bg-wolf/10 text-gray-500 dark:text-wolf'} ${dropTargetIdx === idx ? 'border-l-4 border-l-persian bg-persian/5' : ''}`}
+                      className={`relative group cursor-pointer transition-colors border-b border-gray-200 dark:border-wolf/20 ${compactMode ? 'p-1 md:p-2' : 'p-2 md:p-3'} ${activeCol === col ? 'bg-persian/10 text-persian border-b-2 border-persian' : 'hover:bg-gray-200 dark:hover:bg-wolf/10 text-gray-500 dark:text-wolf'} ${dropTargetIdx === idx ? 'border-l-4 border-l-persian bg-persian/5' : ''}`}
                     >
-                      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider justify-between">
+                      <div className="flex items-center gap-2 text-[10px] md:text-xs font-bold uppercase tracking-wider justify-between min-w-[100px] md:min-w-[150px]">
                           <div className="flex items-center gap-2 overflow-hidden">
                             <GripVertical size={12} className="text-gray-300 dark:text-wolf/30 cursor-grab opacity-0 group-hover:opacity-100 transition-opacity" />
-                            <span className="truncate max-w-[130px]">{col}</span>
+                            <span className="truncate max-w-[80px] md:max-w-[130px]" title="Doble clic para renombrar">{col}</span>
                           </div>
                           
                           {/* BOTÓN TRIGGER MENU */}
@@ -602,12 +618,12 @@ export default function TransformationStudio() {
               </tr>
             </thead>
             <tbody className="bg-white dark:bg-carbon-light divide-y divide-gray-100 dark:divide-wolf/5">
-              {data.slice(0, 100).map((row, i) => (
+              {data.slice(0, visibleRows).map((row, i) => (
                 <tr key={i} className="hover:bg-persian/5 group transition-colors">
-                  <td className={`text-center text-xs text-gray-400 dark:text-wolf/50 font-mono border-r border-gray-100 dark:border-wolf/10 group-hover:text-gray-600 dark:group-hover:text-wolf ${compactMode ? 'py-1' : 'py-3'}`}>{i + 1}</td>
+                  <td className={`text-center text-[10px] md:text-xs text-gray-400 dark:text-wolf/50 font-mono border-r border-gray-100 dark:border-wolf/10 group-hover:text-gray-600 dark:group-hover:text-wolf ${compactMode ? 'py-1' : 'py-2 md:py-3'}`}>{i + 1}</td>
                   {columns.map((col, j) => (
-                    <td key={j} className={`text-sm whitespace-nowrap max-w-[200px] overflow-hidden text-ellipsis text-gray-700 dark:text-zinc/80 ${compactMode ? 'p-1.5' : 'p-3'} ${activeCol === col ? 'bg-persian/5 font-medium' : ''}`}>
-                      {row[col] === null ? <span className="text-gray-300 italic text-xs">null</span> : String(row[col])}
+                    <td key={j} className={`text-[10px] md:text-sm whitespace-nowrap max-w-[100px] md:max-w-[150px] lg:max-w-[200px] overflow-hidden text-ellipsis text-gray-700 dark:text-zinc/80 ${compactMode ? 'p-1 md:p-1.5' : 'p-1.5 md:p-3'} ${activeCol === col ? 'bg-persian/5 font-medium' : ''}`}>
+                      {row[col] === null ? <span className="text-gray-300 italic text-[9px] md:text-xs">null</span> : String(row[col])}
                     </td>
                   ))}
                 </tr>
@@ -615,20 +631,33 @@ export default function TransformationStudio() {
             </tbody>
           </table>
           <div className="p-1 text-center text-[10px] text-gray-400 dark:text-wolf bg-gray-50 dark:bg-carbon border-t border-gray-200 dark:border-wolf/20 sticky bottom-0">
-             Mostrando vista previa (Primeras 100 filas de {data.length.toLocaleString()})
+             {t('studio.showingRows')} {Math.min(visibleRows, data.length).toLocaleString()} / {data.length.toLocaleString()} {t('projects.rowsLabel')}
           </div>
         </div>
       </div>
 
       {/* --- HISTORIAL --- */}
-      <div className={`transition-all duration-300 ease-in-out bg-white dark:bg-carbon-light flex flex-col shadow-2xl relative z-30 h-full rounded-xl border border-gray-200 dark:border-wolf/10 overflow-hidden ml-3 ${historyOpen ? 'w-80 opacity-100' : 'w-0 opacity-0 overflow-hidden border-0 ml-0'}`}>
+      {/* Mobile Backdrop for History */}
+       {historyOpen && (
+         <div 
+             className="md:hidden fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm"
+             onClick={() => setHistoryOpen(false)}
+         ></div>
+       )}
+ 
+       <div className={`
+         transition-all duration-300 ease-in-out bg-white dark:bg-carbon-light flex flex-col shadow-2xl z-[80] h-full rounded-xl border border-gray-200 dark:border-wolf/10 overflow-hidden 
+         fixed top-0 right-0 bottom-0 md:static md:h-full
+         ${historyOpen ? 'w-[85vw] md:w-80 translate-x-0 opacity-100' : 'w-0 translate-x-full md:translate-x-0 opacity-0 md:w-0 border-0 md:ml-0'}
+         md:ml-3
+       `}>
         <div className="p-4 border-b border-gray-200 dark:border-wolf/20 bg-gray-50 dark:bg-[#1a1a1a] flex justify-between items-center h-[53px]">
-          <h3 className="font-bold text-gray-800 dark:text-zinc flex items-center gap-2 text-sm"><History size={16} className="text-persian" /> Historial de Acciones</h3>
+          <h3 className="font-bold text-gray-800 dark:text-zinc flex items-center gap-2 text-sm"><History size={16} className="text-persian" /> {t('studio.historyTitle')}</h3>
           <button onClick={() => setHistoryOpen(false)} className="text-gray-400 hover:text-red-500 transition-colors"><X size={16} /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar bg-white dark:bg-carbon-light">
           {actions.length === 0 ? (
-            <div className="text-center mt-10 opacity-50"><History size={40} className="mx-auto mb-2 text-gray-300 dark:text-wolf"/><p className="text-xs text-gray-400">Sin cambios recientes</p></div>
+            <div className="text-center mt-10 opacity-50"><History size={40} className="mx-auto mb-2 text-gray-300 dark:text-wolf"/><p className="text-xs text-gray-400">{t('studio.historyEmpty')}</p></div>
           ) : (
             actions.map((action, idx) => (
               <div key={idx} className="group relative pl-4 pb-4 border-l-2 border-gray-200 dark:border-wolf/10 last:border-0 last:pb-0">
@@ -638,16 +667,16 @@ export default function TransformationStudio() {
                    <p className="text-xs text-gray-500 dark:text-wolf leading-relaxed">{action.description}</p>
                    
                    {/* BOTÓN DE ELIMINAR PASO CON LÓGICA REAL DE TRANSFORMACIÓN */}
-                   <button 
-                     onClick={(e) => {
-                        e.stopPropagation();
-                        transform.deleteActionFromHistory(idx);
-                     }}
-                     className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md opacity-0 group-hover:opacity-100 transition-all"
-                     title="Eliminar este paso"
-                   >
-                     <Trash2 size={14} />
-                   </button>
+                    <button 
+                      onClick={(e) => {
+                         e.stopPropagation();
+                         transform.deleteActionFromHistory(idx);
+                      }}
+                      className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md opacity-0 group-hover:opacity-100 transition-all"
+                      title={t('studio.historyDeleteStep')}
+                    >
+                      <Trash2 size={14} />
+                    </button>
                  </div>
               </div>
             ))
@@ -665,6 +694,7 @@ export default function TransformationStudio() {
 const DropdownMenu = ({ label, icon, children, isOpen, onClick }) => {
   const [term, setTerm] = useState('');
   const inputRef = useRef(null);
+  const { t } = useI18n();
   
   useEffect(() => { 
     if (isOpen) { 
@@ -691,9 +721,9 @@ const DropdownMenu = ({ label, icon, children, isOpen, onClick }) => {
       {isOpen && (
         <div className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-wolf/20 rounded-xl shadow-2xl z-50 flex flex-col animate-in fade-in slide-in-from-top-2 overflow-hidden ring-1 ring-black/5">
           <div className="p-2 border-b border-gray-100 dark:border-wolf/10 bg-gray-50 dark:bg-black/20">
-            <div className="relative"><Search size={12} className="absolute left-2.5 top-2.5 text-gray-400 dark:text-wolf/70" /><input ref={inputRef} type="text" placeholder="Buscar..." className="w-full bg-white dark:bg-carbon border border-gray-200 dark:border-wolf/20 rounded-lg pl-8 pr-2 py-1.5 text-xs text-gray-700 dark:text-zinc focus:outline-none focus:border-persian placeholder:text-gray-400 dark:placeholder:text-wolf/50" value={term} onChange={(e) => setTerm(e.target.value)} onClick={(e) => e.stopPropagation()} /></div>
+            <div className="relative"><Search size={12} className="absolute left-2.5 top-2.5 text-gray-400 dark:text-wolf/70" /><input ref={inputRef} type="text" placeholder={t('common.search')} className="w-full bg-white dark:bg-carbon border border-gray-200 dark:border-wolf/20 rounded-lg pl-8 pr-2 py-1.5 text-xs text-gray-700 dark:text-zinc focus:outline-none focus:border-persian placeholder:text-gray-400 dark:placeholder:text-wolf/50" value={term} onChange={(e) => setTerm(e.target.value)} onClick={(e) => e.stopPropagation()} /></div>
           </div>
-          <div className="max-h-[350px] overflow-y-auto p-1 custom-scrollbar">{items.length > 0 ? items : <div className="p-4 text-center text-xs text-gray-400 dark:text-wolf opacity-70">Sin resultados</div>}</div>
+          <div className="max-h-[350px] overflow-y-auto p-1 custom-scrollbar">{items.length > 0 ? items : <div className="p-4 text-center text-xs text-gray-400 dark:text-wolf opacity-70">{t('common.noResults')}</div>}</div>
         </div>
       )}
     </div>

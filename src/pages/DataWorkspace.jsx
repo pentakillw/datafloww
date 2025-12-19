@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { useData } from '../context/DataContext';
 import { useDataTransform } from '../hooks/useDataTransform';
 import { useNavigate } from 'react-router-dom';
+import { useI18n } from '../i18n/i18n.jsx';
 import { 
   UploadCloud, CheckCircle2, ArrowRight, FileSpreadsheet, Loader2,
   Table, X, Grid3X3, Layers, AlertCircle, Crown, HardDrive, Lock, AlertTriangle, Zap, RefreshCw, Trash2, Folder, Search, Filter, Calendar
@@ -43,6 +44,7 @@ export default function DataWorkspace() {
 
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
+  const { t } = useI18n();
 
   // --- FILTRADO AVANZADO ---
   const filteredFiles = useMemo(() => {
@@ -371,7 +373,7 @@ export default function DataWorkspace() {
                             <Layers size={24} />
                         </div>
                         <div>
-                            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Archivo Duplicado Detectado</h3>
+                            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">{t('workspace.duplicateFileDetected')}</h3>
                             <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
                                 Ya existe un archivo llamado <span className="font-mono bg-gray-100 dark:bg-white/10 px-1 rounded">{duplicateModal.fName}</span> en tu nube.
                             </p>
@@ -459,7 +461,7 @@ export default function DataWorkspace() {
                     <p className="text-sm text-gray-600 dark:text-gray-300 mb-6 leading-relaxed">{confirmModal.message}</p>
                     <div className="flex gap-3 justify-center">
                         <button onClick={() => setConfirmModal({...confirmModal, isOpen: false})} className="px-5 py-2.5 rounded-lg border border-gray-200 dark:border-wolf/20 text-gray-600 dark:text-gray-400 font-semibold hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">Cancelar</button>
-                        <button onClick={confirmDelete} className="px-5 py-2.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-bold shadow-lg shadow-red-500/20 transition-all active:scale-95">Eliminar Archivo</button>
+                        <button onClick={confirmDelete} className="px-5 py-2.5 rounded-lg bg-red-500 hover:bg-red-600 text-white font-bold shadow-lg shadow-red-500/20 transition-all active:scale-95">{t('workspace.deleteFile')}</button>
                     </div>
                 </div>
              </div>
@@ -525,7 +527,7 @@ export default function DataWorkspace() {
 
       <div className="flex-1 flex flex-col md:flex-row gap-4 h-full min-h-0 w-full overflow-hidden">
         {/* PANEL IZQUIERDO */}
-        <div className="flex-1 flex flex-col min-w-0 w-0 bg-white dark:bg-carbon relative z-10 rounded-xl border border-gray-200 dark:border-wolf/10 shadow-sm overflow-hidden h-full">
+        <div className="flex-1 flex flex-col min-w-0 w-full md:w-0 bg-white dark:bg-carbon relative z-10 rounded-xl border border-gray-200 dark:border-wolf/10 shadow-sm overflow-hidden h-full">
             <div className="p-6 border-b border-gray-200 dark:border-wolf/20 flex justify-between items-center bg-white dark:bg-carbon-light shrink-0">
                 <div>
                     <h2 className="text-xl font-bold text-gray-900 dark:text-zinc flex items-center gap-2">
@@ -533,7 +535,7 @@ export default function DataWorkspace() {
                     {userTier === 'free' && <span className="text-[10px] bg-gray-200 dark:bg-white/10 px-2 py-0.5 rounded text-gray-500 font-bold">Free</span>}
                     {userTier === 'pro' && <span className="text-[10px] bg-persian/10 text-persian border border-persian/20 px-2 py-0.5 rounded flex items-center gap-1 font-bold"><Crown size={10}/> Pro</span>}
                     </h2>
-                    <p className="text-gray-500 dark:text-wolf text-sm mt-1">Sube archivos CSV o Excel (.xlsx).</p>
+                    <p className="text-gray-500 dark:text-wolf text-sm mt-1">{t('workspace.uploadHint')}</p>
                 </div>
                 {data.length > 0 && (
                     <div className="flex gap-3">
@@ -564,7 +566,7 @@ export default function DataWorkspace() {
                             <>
                                 <h3 className="text-xl font-bold text-gray-900 dark:text-zinc mb-2">Haz clic o arrastra tu archivo</h3>
                                 <p className="text-gray-500 dark:text-wolf mb-8">Soportamos archivos complejos.</p>
-                                <button className="bg-persian hover:bg-sea text-white px-8 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2">{loading ? <Loader2 className="animate-spin" /> : 'Seleccionar Archivo'}</button>
+                                <button className="bg-persian hover:bg-sea text-white px-8 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2">{loading ? <Loader2 className="animate-spin" /> : t('workspace.selectFile')}</button>
                             </>
                         )}
                         {/* INPUT ELIMINADO DE AQUÍ PARA QUE NO DESAPAREZCA */}
@@ -574,7 +576,7 @@ export default function DataWorkspace() {
             ) : (
                 <div className="flex-1 p-6 flex flex-col min-h-0 overflow-hidden">
                     <div className="bg-white dark:bg-carbon rounded-xl border border-gray-200 dark:border-wolf/10 shadow-sm flex flex-col flex-1 overflow-hidden">
-                        <div className="bg-gray-100 dark:bg-carbon-light px-4 py-2 border-b border-gray-200 dark:border-wolf/20 flex items-center gap-2 text-xs font-mono text-gray-500 dark:text-wolf shrink-0"><Grid3X3 size={12} /> VISTA PREVIA (Solo lectura)</div>
+                        <div className="bg-gray-100 dark:bg-carbon-light px-4 py-2 border-b border-gray-200 dark:border-wolf/20 flex items-center gap-2 text-xs font-mono text-gray-500 dark:text-wolf shrink-0"><Grid3X3 size={12} /> {t('workspace.previewReadOnly')}</div>
                         <div className="flex-1 overflow-auto custom-scrollbar">
                             <table className="w-full text-left border-collapse">
                                 <thead className="bg-gray-50 dark:bg-black/20 sticky top-0 z-10">
@@ -604,12 +606,12 @@ export default function DataWorkspace() {
         <div className="w-full md:w-80 bg-white dark:bg-carbon border border-gray-200 dark:border-wolf/10 rounded-xl shadow-sm flex flex-col h-full overflow-hidden shrink-0">
             <div className="p-4 border-b border-gray-200 dark:border-wolf/10 bg-gray-50 dark:bg-carbon-light shrink-0">
                 <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-gray-900 dark:text-zinc flex items-center gap-2"><HardDrive size={18} className="text-persian"/> {showTrash ? 'Papelera' : 'Mis Archivos'}</h3>
+                    <h3 className="font-bold text-gray-900 dark:text-zinc flex items-center gap-2"><HardDrive size={18} className="text-persian"/> {showTrash ? t('workspace.trash') : t('workspace.myFiles')}</h3>
                     <div className="flex items-center gap-2">
-                         <button onClick={() => setShowFilters(!showFilters)} className={`p-1.5 rounded hover:bg-gray-200 dark:hover:bg-white/10 transition-colors ${showFilters ? 'bg-persian/10 text-persian' : 'text-gray-400'}`} title="Filtros Avanzados">
+                         <button onClick={() => setShowFilters(!showFilters)} className={`p-1.5 rounded hover:bg-gray-200 dark:hover:bg-white/10 transition-colors ${showFilters ? 'bg-persian/10 text-persian' : 'text-gray-400'}`} title={t('workspace.filtersTooltip')}>
                             <Filter size={16}/>
                          </button>
-                        <button onClick={() => setShowTrash(!showTrash)} className={`p-1.5 rounded hover:bg-gray-200 dark:hover:bg-white/10 transition-colors ${showTrash ? 'text-red-500 bg-red-50 dark:bg-red-900/10' : 'text-gray-400'}`} title={showTrash ? "Ver Archivos" : "Ver Papelera"}>
+                        <button onClick={() => setShowTrash(!showTrash)} className={`p-1.5 rounded hover:bg-gray-200 dark:hover:bg-white/10 transition-colors ${showTrash ? 'text-red-500 bg-red-50 dark:bg-red-900/10' : 'text-gray-400'}`} title={showTrash ? t('workspace.viewFiles') : t('workspace.viewTrash')}>
                             {showTrash ? <ArrowRight size={16}/> : <Trash2 size={16}/>}
                         </button>
                     </div>
@@ -620,7 +622,7 @@ export default function DataWorkspace() {
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
                     <input 
                         type="text" 
-                        placeholder="Buscar archivo o proyecto..." 
+                        placeholder={t('workspace.searchPlaceholder')}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full bg-white dark:bg-black/20 border border-gray-200 dark:border-wolf/10 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:border-persian outline-none transition-colors"
@@ -647,7 +649,7 @@ export default function DataWorkspace() {
                 )}
 
                 <div className="flex justify-between items-center mt-3 text-xs">
-                    <span className="text-gray-500 dark:text-wolf">Créditos Usados:</span>
+                    <span className="text-gray-500 dark:text-wolf">{t('workspace.creditsUsedLabel')}</span>
                     <span className={`font-bold ${!canUploadNew ? 'text-red-500' : 'text-green-500'}`}>{filesUploadedCount} / {planLimits.maxFiles}</span>
                 </div>
                 <div className="w-full bg-gray-200 dark:bg-black/30 h-1.5 rounded-full mt-1 overflow-hidden">

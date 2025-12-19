@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useData } from '../context/DataContext';
+import { useI18n } from '../i18n/i18n.jsx';
 import { 
-  FileJson, Copy, Check, FileSpreadsheet, Terminal, Package, Database, ShieldAlert, Lock, Crown 
+  FileJson, Copy, Check, FileSpreadsheet, Terminal, Package, Database, ShieldAlert, Lock, Crown,
+  Webhook, Link, Send
 } from 'lucide-react';
 import { generateSQL, generatePythonGUI, generateMCode, generateRCode } from '../utils/exportGenerators';
 
@@ -27,6 +29,10 @@ export default function ExportHub() {
   const { data, columns, actions, fileName, planLimits, userTier, cloudFiles, currentFileId, projects } = useData();
   const [activeTab, setActiveTab] = useState('files');
   const [copied, setCopied] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [sendResult, setSendResult] = useState(null); // { success: boolean, message: string }
+  const { t } = useI18n();
 
   // Detección de sugerencias de automatización
   const suggestion = actions.find(a => a.type === 'SUGGEST_EXPORT');
@@ -98,6 +104,33 @@ export default function ExportHub() {
     link.click();
   };
 
+  // --- SEND TO WEBHOOK ---
+  const sendToWebhook = async () => {
+      if (!webhookUrl) return;
+      setIsSending(true);
+      setSendResult(null);
+      try {
+          const response = await fetch(webhookUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                  filename: fileName, 
+                  timestamp: new Date().toISOString(),
+                  data: data 
+              })
+          });
+          if (response.ok) {
+              setSendResult({ success: true, message: 'Datos enviados correctamente.' });
+          } else {
+              setSendResult({ success: false, message: `Error ${response.status}: ${response.statusText}` });
+          }
+      } catch (error) {
+          setSendResult({ success: false, message: `Error de conexión: ${error.message}` });
+      } finally {
+          setIsSending(false);
+      }
+  };
+
   // --- 2. GENERADOR SQL OPTIMIZADO ---
   // (generateSQL importado de utils)
 
@@ -120,28 +153,28 @@ export default function ExportHub() {
         <div className="p-6 border-b border-gray-200 dark:border-wolf/20 bg-white dark:bg-carbon-light">
            <div className="flex justify-between items-start">
              <div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-zinc mb-2 flex items-center gap-2"><Package className="text-persian" /> Export Hub</h2>
-                <p className="text-gray-500 dark:text-wolf text-sm">Descarga tus datos procesados o genera código de automatización.</p>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-zinc mb-2 flex items-center gap-2"><Package className="text-persian" /> {t('export.headerTitle')}</h2>
+                <p className="text-gray-500 dark:text-wolf text-sm">{t('export.headerSubtitle')}</p>
              </div>
-             {userTier === 'free' && <span className="text-xs bg-gray-200 px-3 py-1 rounded text-gray-600 font-bold">Plan Free</span>}
-             {userTier === 'pro' && <span className="text-xs bg-persian/10 text-persian border border-persian/20 px-3 py-1 rounded font-bold flex gap-1 items-center"><Crown size={12}/> Plan Pro</span>}
+             {userTier === 'free' && <span className="text-xs bg-gray-200 px-3 py-1 rounded text-gray-600 font-bold">{t('export.planFreeLabel')}</span>}
+             {userTier === 'pro' && <span className="text-xs bg-persian/10 text-persian border border-persian/20 px-3 py-1 rounded font-bold flex gap-1 items-center"><Crown size={12}/> {t('export.planProLabel')}</span>}
            </div>
            
-           <div className="flex gap-8 mt-8 border-b border-gray-200 dark:border-wolf/10 text-sm">
-              <button onClick={() => setActiveTab('files')} className={`pb-3 px-1 font-bold transition-all border-b-2 flex items-center gap-2 ${activeTab === 'files' ? 'text-persian border-persian' : 'text-gray-400 border-transparent hover:text-gray-600 dark:text-wolf dark:hover:text-white'}`}>
-                <FileSpreadsheet size={16}/> 1. Archivos
+           <div className="flex gap-4 sm:gap-8 mt-8 border-b border-gray-200 dark:border-wolf/10 text-sm overflow-x-auto scrollbar-hide">
+              <button onClick={() => setActiveTab('files')} className={`pb-3 px-1 font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${activeTab === 'files' ? 'text-persian border-persian' : 'text-gray-400 border-transparent hover:text-gray-600 dark:text-wolf dark:hover:text-white'}`}>
+                <FileSpreadsheet size={16}/> {t('export.filesTab')}
               </button>
-              <button onClick={() => setActiveTab('sql')} className={`pb-3 px-1 font-bold transition-all border-b-2 flex items-center gap-2 ${activeTab === 'sql' ? 'text-persian border-persian' : 'text-gray-400 border-transparent hover:text-gray-600 dark:text-wolf dark:hover:text-white'}`}>
-                <Database size={16}/> 2. SQL {userTier === 'free' && <Lock size={12} className="text-gray-400"/>}
+              <button onClick={() => setActiveTab('connectors')} className={`pb-3 px-1 font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${activeTab === 'connectors' ? 'text-persian border-persian' : 'text-gray-400 border-transparent hover:text-gray-600 dark:text-wolf dark:hover:text-white'}`}>
+                <Webhook size={16}/> {t('export.connectorsTab')}
               </button>
-              <button onClick={() => setActiveTab('code')} className={`pb-3 px-1 font-bold transition-all border-b-2 flex items-center gap-2 ${activeTab === 'code' ? 'text-persian border-persian' : 'text-gray-400 border-transparent hover:text-gray-600 dark:text-wolf dark:hover:text-white'}`}>
-                <Terminal size={16}/> 3. Python {userTier === 'free' && <Lock size={12} className="text-gray-400"/>}
+              <button onClick={() => setActiveTab('sql')} className={`pb-3 px-1 font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${activeTab === 'sql' ? 'text-persian border-persian' : 'text-gray-400 border-transparent hover:text-gray-600 dark:text-wolf dark:hover:text-white'}`}>
+                <Database size={16}/> 3. SQL {userTier === 'free' && <Lock size={12} className="text-gray-400"/>}
               </button>
-              <button onClick={() => setActiveTab('m')} className={`pb-3 px-1 font-bold transition-all border-b-2 flex items-center gap-2 ${activeTab === 'm' ? 'text-persian border-persian' : 'text-gray-400 border-transparent hover:text-gray-600 dark:text-wolf dark:hover:text-white'}`}>
-                <FileJson size={16}/> 4. Power Query (M) {userTier === 'free' && <Lock size={12} className="text-gray-400"/>}
+              <button onClick={() => setActiveTab('code')} className={`pb-3 px-1 font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${activeTab === 'code' ? 'text-persian border-persian' : 'text-gray-400 border-transparent hover:text-gray-600 dark:text-wolf dark:hover:text-white'}`}>
+                <Terminal size={16}/> 4. Python {userTier === 'free' && <Lock size={12} className="text-gray-400"/>}
               </button>
-              <button onClick={() => setActiveTab('r')} className={`pb-3 px-1 font-bold transition-all border-b-2 flex items-center gap-2 ${activeTab === 'r' ? 'text-persian border-persian' : 'text-gray-400 border-transparent hover:text-gray-600 dark:text-wolf dark:hover:text-white'}`}>
-                <Terminal size={16}/> 5. R Script {userTier === 'free' && <Lock size={12} className="text-gray-400"/>}
+              <button onClick={() => setActiveTab('m')} className={`pb-3 px-1 font-bold transition-all border-b-2 flex items-center gap-2 whitespace-nowrap ${activeTab === 'm' ? 'text-persian border-persian' : 'text-gray-400 border-transparent hover:text-gray-600 dark:text-wolf dark:hover:text-white'}`}>
+                <FileJson size={16}/> 5. Power Query {userTier === 'free' && <Lock size={12} className="text-gray-400"/>}
               </button>
            </div>
         </div>
@@ -150,7 +183,7 @@ export default function ExportHub() {
           {!data.length ? (
              <div className="h-full flex flex-col items-center justify-center opacity-50">
                <Package size={48} className="mb-4 text-gray-400"/>
-               <p>Carga datos primero.</p>
+               <p>{t('export.emptyData')}</p>
              </div>
           ) : (
             <>
@@ -159,17 +192,75 @@ export default function ExportHub() {
                   <div onClick={downloadCSV} className="cursor-pointer group bg-white dark:bg-carbon border-2 border-dashed border-gray-200 dark:border-wolf/20 hover:border-green-500 dark:hover:border-green-500 rounded-2xl p-10 flex flex-col items-center text-center transition-all hover:shadow-xl hover:-translate-y-1 relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-1 bg-green-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                     <div className="p-5 bg-green-50 dark:bg-green-900/10 rounded-full mb-6 text-green-600 dark:text-green-400 group-hover:scale-110 transition-transform shadow-sm"><FileSpreadsheet size={48} /></div>
-                    <h3 className="text-xl font-bold text-gray-900 dark:text-zinc mb-2">CSV / Excel</h3>
-                    <p className="text-sm text-gray-500 dark:text-wolf">Formato universal compatible.</p>
-                    <span className="mt-6 text-xs font-bold text-green-600 bg-green-100 dark:bg-green-900/20 px-3 py-1 rounded-full">Recomendado</span>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-zinc mb-2">{t('export.files.csvTitle')}</h3>
+                    <p className="text-sm text-gray-500 dark:text-wolf">{t('export.files.csvDesc')}</p>
+                    <span className="mt-6 text-xs font-bold text-green-600 bg-green-100 dark:bg-green-900/20 px-3 py-1 rounded-full">{t('export.files.csvRecommended')}</span>
                   </div>
                   <div onClick={downloadJSON} className="cursor-pointer group bg-white dark:bg-carbon border-2 border-dashed border-gray-200 dark:border-wolf/20 hover:border-yellow-500 dark:hover:border-yellow-500 rounded-2xl p-10 flex flex-col items-center text-center transition-all hover:shadow-xl hover:-translate-y-1 relative overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-1 bg-yellow-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
                     <div className="p-5 bg-yellow-50 dark:bg-yellow-900/10 rounded-full mb-6 text-yellow-600 dark:text-yellow-400 group-hover:scale-110 transition-transform shadow-sm"><FileJson size={48} /></div>
-                    <h3 className="text-xl font-bold text-gray-900 dark:text-zinc mb-2">JSON (API)</h3>
-                    <p className="text-sm text-gray-500 dark:text-wolf">Estructura ligera.</p>
+                    <h3 className="text-xl font-bold text-gray-900 dark:text-zinc mb-2">{t('export.files.jsonTitle')}</h3>
+                    <p className="text-sm text-gray-500 dark:text-wolf">{t('export.files.jsonDesc')}</p>
                   </div>
                 </div>
+              )}
+
+              {activeTab === 'connectors' && (
+                  <div className="h-full max-w-3xl mx-auto pt-4 animate-in fade-in">
+                      <div className="bg-white dark:bg-carbon border border-gray-200 dark:border-wolf/20 rounded-xl p-6 shadow-sm">
+                          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                              <Webhook size={20} className="text-persian"/> {t('export.connectors.title')}
+                          </h3>
+                          <p className="text-sm text-gray-500 dark:text-wolf mb-6">
+                              {t('export.connectors.desc')}
+                          </p>
+                          
+                          <div className="space-y-4">
+                              <div>
+                                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-2">{t('export.connectors.endpointLabel')}</label>
+                                  <div className="flex gap-2">
+                                      <div className="relative flex-1">
+                                          <Link size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+                                          <input 
+                                              type="url" 
+                                              placeholder="https://hooks.zapier.com/..." 
+                                              value={webhookUrl}
+                                              onChange={(e) => setWebhookUrl(e.target.value)}
+                                              className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-wolf/20 rounded-lg outline-none focus:border-persian transition-all text-sm"
+                                          />
+                                      </div>
+                                      <button 
+                                          onClick={sendToWebhook}
+                                          disabled={!webhookUrl || isSending}
+                                          className="bg-persian hover:bg-sea disabled:opacity-50 text-white px-6 py-2 rounded-lg font-bold shadow-md transition-all active:scale-95 flex items-center gap-2"
+                                      >
+                                          {isSending ? t('export.connectors.sending') : <><Send size={16}/> {t('export.connectors.send')}</>}
+                                      </button>
+                                  </div>
+                              </div>
+
+                              {sendResult && (
+                                  <div className={`p-3 rounded-lg text-sm flex items-center gap-2 ${sendResult.success ? 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-400'}`}>
+                                      {sendResult.success ? <Check size={16}/> : <ShieldAlert size={16}/>}
+                                      {sendResult.message}
+                                  </div>
+                              )}
+                          </div>
+                      </div>
+
+                      <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4 opacity-60">
+                          <div className="border border-dashed border-gray-300 dark:border-wolf/20 rounded-xl p-6 flex flex-col items-center justify-center text-center">
+                              <div className="grayscale mb-2"><FileSpreadsheet size={32} /></div>
+                              <h4 className="font-bold text-sm">{t('export.connectors.gsheets')}</h4>
+                              <span className="text-xs bg-gray-200 dark:bg-wolf/20 px-2 py-0.5 rounded mt-2">{t('export.connectors.upcoming')}</span>
+                          </div>
+                          <div className="border border-dashed border-gray-300 dark:border-wolf/20 rounded-xl p-6 flex flex-col items-center justify-center text-center">
+                              <div className="grayscale mb-2"><Database size={32} /></div>
+                              <h4 className="font-bold text-sm">{t('export.connectors.postgres')}</h4>
+                              <span className="text-xs bg-gray-200 dark:bg-wolf/20 px-2 py-0.5 rounded mt-2">{t('export.connectors.upcoming')}</span>
+                          </div>
+                      </div>
+                  </div>
               )}
 
               {activeTab === 'sql' && (
@@ -180,7 +271,7 @@ export default function ExportHub() {
                         <Database size={12}/> script.sql
                         {userTier === 'free' && <span className="text-[10px] bg-persian/10 text-persian px-1.5 rounded font-bold border border-persian/20">Pro Unlocked</span>}
                       </div>
-                      <button onClick={() => copyToClipboard(generateSQL(data, columns, fileName))} className="flex items-center gap-2 text-xs font-bold bg-persian hover:bg-sea text-white px-4 py-2 rounded-lg transition-all shadow-lg shadow-persian/20 active:scale-95">{copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copiado' : 'Copiar SQL'}</button>
+                      <button onClick={() => copyToClipboard(generateSQL(data, columns, fileName))} className="flex items-center gap-2 text-xs font-bold bg-persian hover:bg-sea text-white px-4 py-2 rounded-lg transition-all shadow-lg shadow-persian/20 active:scale-95">{copied ? <Check size={14} /> : <Copy size={14} />} {copied ? t('export.sql.copied') : t('export.sql.copy')}</button>
                   </div>
                   <div className="flex-1 bg-[#1e1e1e] rounded-xl p-6 overflow-auto border border-gray-700 custom-scrollbar shadow-inner text-left relative group">
                     <pre className="text-sm font-mono text-zinc whitespace-pre-wrap leading-relaxed"><code className="language-sql">{generateSQL(data, columns, fileName)}</code></pre>

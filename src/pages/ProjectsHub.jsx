@@ -3,32 +3,57 @@ import { useData } from '../context/DataContext';
 import { 
     Folder, FolderPlus, Search, Calendar, FileText, 
     MoreVertical, Trash2, ArrowRight, Layers, Plus, X,
-    LayoutGrid, List as ListIcon, Clock, RefreshCw
+    LayoutGrid, List as ListIcon, Clock, RefreshCw, Edit2
 } from 'lucide-react';
+import { useI18n } from '../i18n/i18n.jsx';
 
 export default function ProjectsHub() {
-    const { projects, cloudFiles, createProject, deleteProject, assignFileToProject, refreshCloudFiles, showToast } = useData();
+    const { projects, cloudFiles, createProject, updateProject, deleteProject, assignFileToProject, refreshCloudFiles, showToast } = useData();
+    const { t } = useI18n();
     const [viewMode, setViewMode] = useState('grid'); // grid | list
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedProject, setSelectedProject] = useState(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
+    const [editingProject, setEditingProject] = useState(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
     
-    // New Project Form
-    const [newProjectName, setNewProjectName] = useState('');
-    const [newProjectDesc, setNewProjectDesc] = useState('');
+    // Project Form (Shared for Create/Edit)
+    const [projectName, setProjectName] = useState('');
+    const [projectDesc, setProjectDesc] = useState('');
 
     const filteredProjects = projects.filter(p => 
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
         p.description?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
-    const handleCreate = () => {
-        if (!newProjectName.trim()) return;
-        createProject({ name: newProjectName, description: newProjectDesc });
+    const openCreateModal = () => {
+        setProjectName('');
+        setProjectDesc('');
+        setEditingProject(null);
+        setShowCreateModal(true);
+    };
+
+    const openEditModal = (project, e) => {
+        e.stopPropagation();
+        setProjectName(project.name);
+        setProjectDesc(project.description || '');
+        setEditingProject(project);
+        setShowCreateModal(true);
+    };
+
+    const handleSave = () => {
+        if (!projectName.trim()) return;
+        
+        if (editingProject) {
+            updateProject(editingProject.id, { name: projectName, description: projectDesc });
+        } else {
+            createProject({ name: projectName, description: projectDesc });
+        }
+        
         setShowCreateModal(false);
-        setNewProjectName('');
-        setNewProjectDesc('');
+        setProjectName('');
+        setProjectDesc('');
+        setEditingProject(null);
     };
 
     const handleRefresh = async () => {
@@ -36,7 +61,7 @@ export default function ProjectsHub() {
         await refreshCloudFiles();
         setTimeout(() => {
             setIsRefreshing(false);
-            showToast('Archivos sincronizados correctamente', 'success');
+            showToast(t('projects.filesSynced'), 'success');
         }, 800);
     };
 
@@ -56,19 +81,19 @@ export default function ProjectsHub() {
                                 <Folder className="text-persian" fill="currentColor" fillOpacity={0.2} />
                                 {selectedProject.name}
                             </h1>
-                            <p className="text-gray-500 dark:text-wolf text-sm">{selectedProject.description || 'Sin descripción'}</p>
+                            <p className="text-gray-500 dark:text-wolf text-sm">{selectedProject.description || t('projects.noDescription')}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-3">
                          <button 
                             onClick={handleRefresh}
                             className={`p-2 text-gray-500 hover:text-persian hover:bg-persian/10 rounded-lg transition-all ${isRefreshing ? 'animate-spin text-persian' : ''}`}
-                            title="Recargar archivos"
+                            title={t('projects.reloadFilesTooltip')}
                         >
                             <RefreshCw size={20} />
                         </button>
                         <div className="flex items-center gap-2 text-sm text-gray-500 bg-white dark:bg-carbon border border-gray-200 dark:border-wolf/10 px-3 py-1 rounded-lg shadow-sm">
-                            <Clock size={14} /> Created: {new Date(selectedProject.createdAt).toLocaleDateString()}
+                            <Clock size={14} /> {t('projects.createdLabel')}: {new Date(selectedProject.createdAt).toLocaleDateString()}
                         </div>
                     </div>
                 </div>
@@ -77,11 +102,11 @@ export default function ProjectsHub() {
                 <div className="flex-1 bg-white dark:bg-carbon border border-gray-200 dark:border-wolf/10 rounded-xl overflow-hidden shadow-sm flex flex-col">
                     <div className="p-4 border-b border-gray-200 dark:border-wolf/10 bg-gray-50 dark:bg-carbon-light flex justify-between items-center">
                         <h3 className="font-bold text-gray-700 dark:text-zinc flex items-center gap-2">
-                            <Layers size={18} className="text-persian"/> Archivos del Proyecto ({projectFiles.length})
+                            <Layers size={18} className="text-persian"/> {t('projects.projectFilesTitle')} ({projectFiles.length})
                         </h3>
                         {/* Placeholder for Add File to Project button if we implement it here */}
                         <div className="flex items-center gap-2">
-                            <span className="text-xs text-gray-400">Arrastra archivos aquí o usa el Workspace</span>
+                            <span className="text-xs text-gray-400">{t('projects.dragHint')}</span>
                         </div>
                     </div>
                     
@@ -89,8 +114,8 @@ export default function ProjectsHub() {
                         {projectFiles.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-full text-gray-400">
                                 <FolderPlus size={48} className="mb-4 opacity-50" />
-                                <p>Este proyecto está vacío.</p>
-                                <p className="text-xs">Asigna archivos desde el Workspace.</p>
+                                <p>{t('projects.projectEmptyTitle')}</p>
+                                <p className="text-xs">{t('projects.projectEmptySubtitle')}</p>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -102,7 +127,7 @@ export default function ProjectsHub() {
                                             </div>
                                             <button 
                                                 onClick={() => {
-                                                    if(window.confirm('¿Quitar archivo del proyecto?')) assignFileToProject(file.id, null);
+                                                    if(window.confirm(t('projects.removeFileFromProjectConfirm'))) assignFileToProject(file.id, null);
                                                 }}
                                                 className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
                                             >
@@ -111,7 +136,7 @@ export default function ProjectsHub() {
                                         </div>
                                         <h4 className="font-bold text-gray-800 dark:text-zinc truncate" title={file.filename}>{file.filename}</h4>
                                         <div className="flex justify-between items-center mt-4 text-xs text-gray-500 dark:text-wolf">
-                                            <span>{file.row_count?.toLocaleString()} filas</span>
+                                            <span>{file.row_count?.toLocaleString()} {t('projects.rowsLabel')}</span>
                                             <span>{(parseInt(file.file_size)/1024).toFixed(1)} KB</span>
                                         </div>
                                     </div>
@@ -127,34 +152,34 @@ export default function ProjectsHub() {
     // Projects Grid View
     return (
         <div className="h-full flex flex-col p-6 bg-gray-50/50 dark:bg-black/20 overflow-hidden animate-in fade-in">
-            <div className="flex justify-between items-center mb-8">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
                         <Folder className="text-persian" size={32} />
-                        Gestión de Proyectos
+                        {t('projects.title')}
                     </h1>
-                    <p className="text-gray-500 dark:text-wolf mt-1">Organiza tus archivos en espacios de trabajo dedicados.</p>
+                    <p className="text-gray-500 dark:text-wolf mt-1">{t('projects.subtitle')}</p>
                 </div>
                 <button 
                     onClick={() => setShowCreateModal(true)}
-                    className="bg-persian hover:bg-sea text-white px-6 py-2 rounded-xl font-bold shadow-lg shadow-persian/20 flex items-center gap-2 transition-all active:scale-95"
+                    className="bg-persian hover:bg-sea text-white px-6 py-2 rounded-xl font-bold shadow-lg shadow-persian/20 flex items-center gap-2 transition-all active:scale-95 w-full sm:w-auto justify-center"
                 >
-                    <Plus size={20} /> Nuevo Proyecto
+                    <Plus size={20} /> {t('projects.newProject')}
                 </button>
             </div>
 
-            <div className="flex items-center gap-4 mb-6">
-                <div className="relative flex-1 max-w-md">
+            <div className="flex flex-col sm:flex-row items-center gap-4 mb-6">
+                <div className="relative flex-1 w-full sm:max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                     <input 
                         type="text" 
-                        placeholder="Buscar proyectos..." 
+                        placeholder={t('projects.searchPlaceholder')} 
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full bg-white dark:bg-carbon border border-gray-200 dark:border-wolf/20 rounded-xl pl-10 pr-4 py-2 outline-none focus:border-persian transition-all"
                     />
                 </div>
-                <div className="flex bg-white dark:bg-carbon border border-gray-200 dark:border-wolf/20 rounded-lg p-1">
+                <div className="flex bg-white dark:bg-carbon border border-gray-200 dark:border-wolf/20 rounded-lg p-1 self-end sm:self-auto">
                     <button onClick={() => setViewMode('grid')} className={`p-2 rounded ${viewMode === 'grid' ? 'bg-gray-100 dark:bg-white/10 text-persian' : 'text-gray-400'}`}><LayoutGrid size={18}/></button>
                     <button onClick={() => setViewMode('list')} className={`p-2 rounded ${viewMode === 'list' ? 'bg-gray-100 dark:bg-white/10 text-persian' : 'text-gray-400'}`}><ListIcon size={18}/></button>
                 </div>
@@ -164,8 +189,8 @@ export default function ProjectsHub() {
                 {filteredProjects.length === 0 ? (
                     <div className="text-center py-20 border-2 border-dashed border-gray-200 dark:border-wolf/10 rounded-2xl bg-white/50 dark:bg-white/5">
                         <FolderPlus size={48} className="mx-auto text-gray-300 dark:text-wolf mb-4" />
-                        <h3 className="text-xl font-bold text-gray-700 dark:text-gray-300">No hay proyectos</h3>
-                        <p className="text-gray-500 dark:text-gray-500 mt-2">Crea tu primer proyecto para empezar a organizar.</p>
+                        <h3 className="text-xl font-bold text-gray-700 dark:text-gray-300">{t('projects.emptyTitle')}</h3>
+                        <p className="text-gray-500 dark:text-gray-500 mt-2">{t('projects.emptySubtitle')}</p>
                     </div>
                 ) : (
                     <div className={viewMode === 'grid' ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" : "space-y-3"}>
@@ -184,23 +209,33 @@ export default function ProjectsHub() {
                                         </div>
                                         <div>
                                             <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-1 group-hover:text-persian transition-colors">{project.name}</h3>
-                                            <p className="text-sm text-gray-500 dark:text-wolf line-clamp-2">{project.description || 'Sin descripción'}</p>
+                                            <p className="text-sm text-gray-500 dark:text-wolf line-clamp-2">{project.description || t('projects.noDescription')}</p>
                                         </div>
                                     </div>
 
                                     <div className={`flex items-center gap-4 ${viewMode === 'grid' ? 'mt-4 pt-4 border-t border-gray-100 dark:border-wolf/10 justify-between' : ''}`}>
                                         <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-wolf">
-                                            <Layers size={14} /> {filesCount} archivos
+                                            <Layers size={14} /> {filesCount} {t('projects.filesCountLabel')}
                                         </div>
-                                        <button 
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                if(window.confirm('¿Eliminar proyecto? Se desvincularán los archivos.')) deleteProject(project.id);
-                                            }}
-                                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
+                                        <div className="flex items-center gap-1">
+                                            <button 
+                                                onClick={(e) => openEditModal(project, e)}
+                                                className="p-2 text-gray-400 hover:text-persian hover:bg-persian/10 rounded-lg transition-colors"
+                                                title={t('projects.edit')}
+                                            >
+                                                <Edit2 size={16} />
+                                            </button>
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if(window.confirm(t('projects.deleteConfirm'))) deleteProject(project.id);
+                                                }}
+                                                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                                title={t('projects.delete')}
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -209,12 +244,12 @@ export default function ProjectsHub() {
                 )}
             </div>
 
-            {/* CREATE MODAL */}
+            {/* CREATE/EDIT MODAL */}
             {showCreateModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
                     <div className="bg-white dark:bg-carbon rounded-xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-wolf/20 overflow-hidden">
                         <div className="p-6 border-b border-gray-200 dark:border-wolf/10 flex justify-between items-center bg-gray-50 dark:bg-white/5">
-                            <h3 className="font-bold text-lg dark:text-white">Nuevo Proyecto</h3>
+                            <h3 className="font-bold text-lg dark:text-white">{editingProject ? 'Editar Proyecto' : 'Nuevo Proyecto'}</h3>
                             <button onClick={() => setShowCreateModal(false)}><X size={20} className="text-gray-400 hover:text-red-500" /></button>
                         </div>
                         <div className="p-6 space-y-4">
@@ -223,8 +258,8 @@ export default function ProjectsHub() {
                                 <input 
                                     autoFocus
                                     type="text" 
-                                    value={newProjectName} 
-                                    onChange={(e) => setNewProjectName(e.target.value)}
+                                    value={projectName} 
+                                    onChange={(e) => setProjectName(e.target.value)}
                                     className="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-wolf/20 rounded-lg px-4 py-2 outline-none focus:border-persian"
                                     placeholder="Ej: Análisis Q1"
                                 />
@@ -232,8 +267,8 @@ export default function ProjectsHub() {
                             <div>
                                 <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Descripción</label>
                                 <textarea 
-                                    value={newProjectDesc} 
-                                    onChange={(e) => setNewProjectDesc(e.target.value)}
+                                    value={projectDesc} 
+                                    onChange={(e) => setProjectDesc(e.target.value)}
                                     className="w-full bg-gray-50 dark:bg-black/20 border border-gray-200 dark:border-wolf/20 rounded-lg px-4 py-2 outline-none focus:border-persian h-24 resize-none"
                                     placeholder="Opcional..."
                                 />
@@ -241,7 +276,9 @@ export default function ProjectsHub() {
                         </div>
                         <div className="p-6 border-t border-gray-200 dark:border-wolf/10 bg-gray-50 dark:bg-white/5 flex justify-end gap-3">
                             <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 text-gray-500 hover:bg-gray-200 rounded-lg">Cancelar</button>
-                            <button onClick={handleCreate} className="bg-persian hover:bg-sea text-white px-6 py-2 rounded-lg font-bold shadow-lg">Crear Proyecto</button>
+                            <button onClick={handleSave} className="bg-persian hover:bg-sea text-white px-6 py-2 rounded-lg font-bold shadow-lg">
+                                {editingProject ? 'Guardar Cambios' : 'Crear Proyecto'}
+                            </button>
                         </div>
                     </div>
                 </div>

@@ -12,7 +12,7 @@
   body {
     /* MODO CLARO: Fondo gris muy suave (zinc-50), Texto primario legible (#333) */
     /* MODO OSCURO: Fondo Carbon, Texto Zinc */
-    @apply font-sans antialiased text-primary dark:text-zinc bg-gray-50 dark:bg-carbon transition-colors duration-300;
+    @apply font-sans antialiased text-gray-900 dark:text-zinc bg-gray-50 dark:bg-carbon transition-colors duration-300;
   }
 }
 
@@ -35,12 +35,21 @@
   .table-cell {
     @apply p-3 text-sm text-gray-700 dark:text-zinc/80 border-b border-gray-100 dark:border-wolf/5 whitespace-nowrap max-w-[200px] overflow-hidden text-ellipsis;
   }
+
+  /* Utility to hide scrollbar but allow scrolling */
+  .scrollbar-hide {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }
 
-/* Scrollbar */
+/* Scrollbar Global */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px; /* Más delgado */
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   @apply bg-transparent;

@@ -25,6 +25,40 @@ export function DataProvider({ children }) {
   // --- SUSCRIPCIÓN & USUARIO ---
   const [userTier, setUserTier] = useState('free');
   const [userEmail, setUserEmail] = useState('');
+  const [userProfile, setUserProfile] = useState(null); // Nuevo estado para perfil completo
+  const [theme, setTheme] = useState(() => localStorage.getItem('nocodepy_theme') || 'dark');
+
+  // Efecto para aplicar tema
+  useEffect(() => {
+    if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+    } else {
+        document.documentElement.classList.remove('dark');
+    }
+    localStorage.setItem('nocodepy_theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+      setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
+
+  const updateProfile = async (updates) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+          .from('profiles')
+          .update(updates)
+          .eq('id', user.id);
+
+      if (error) {
+          showToast('Error al actualizar perfil: ' + error.message, 'error');
+          return;
+      }
+
+      setUserProfile(prev => ({ ...prev, ...updates }));
+      showToast('Perfil actualizado correctamente.', 'success');
+  };
   
   const [cloudFiles, setCloudFiles] = useState([]); 
   const [isLoadingFiles, setIsLoadingFiles] = useState(true);
@@ -37,26 +71,103 @@ export function DataProvider({ children }) {
   // --- GESTIÓN DE PROYECTOS (LOCAL MOCK -> SUPABASE) ---
   const [projects, setProjects] = useState([]);
 
-  // Cargar proyectos desde Supabase al inicio
+  // Cargar proyectos desde Supabase
+  const fetchProjects = useCallback(async (userId) => {
+    if (!userId) {
+        setProjects([]);
+        return;
+    }
+    const { data: userProjects } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+    
+    if (userProjects) {
+        setProjects(userProjects);
+    }
+  }, []);
+
+  // --- 1. INICIALIZACIÓN Y AUTH ---
+  const refreshCloudFiles = useCallback(async (userId) => {
+    const uid = userId || (await supabase.auth.getUser()).data.user?.id;
+    if (!uid) {
+        setCloudFiles([]);
+        return;
+    }
+    
+    const { data: files } = await supabase.from('user_files').select('*').eq('user_id', uid).order('created_at', { ascending: false });
+    
+    if (files) {
+      const filesWithProjects = files.map(f => ({
+          ...f,
+          projectId: f.project_id 
+      }));
+      setCloudFiles(filesWithProjects);
+      setIsLoadingFiles(false);
+    }
+  }, []);
+
   useEffect(() => {
     let mounted = true;
-    const fetchProjects = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user && mounted) {
-        const { data: userProjects } = await supabase
-          .from('projects')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false });
-        
-        if (userProjects) {
-          setProjects(userProjects);
+
+    const initData = async (session) => {
+        if (session?.user && mounted) {
+            const user = session.user;
+            setUserEmail(user.email);
+            
+            // Cargar Perfil
+            try {
+                let { data: profile } = await supabase
+                    .from('profiles')
+                    .select('*') // Traer todo (incluyendo full_name, avatar_url)
+                    .eq('id', user.id)
+                    .maybeSingle(); 
+
+                if (!profile) {
+                    const { data: newProfile } = await supabase
+                    .from('profiles')
+                    .insert({ id: user.id, email: user.email, tier: 'free', uploads_count: 0 })
+                    .select()
+                    .single();
+                    profile = newProfile;
+                }
+                
+                if (profile) {
+                    setUserTier(profile.tier || 'free');
+                    setUserProfile(profile);
+                }
+            } catch (e) { console.error("Error perfil:", e); }
+
+            // Cargar Datos de Usuario
+            await Promise.all([
+                fetchProjects(user.id),
+                refreshCloudFiles(user.id)
+            ]);
+        } else if (!session && mounted) {
+            // Limpiar estado al cerrar sesión
+            setUserEmail('');
+            setUserTier('free');
+            setProjects([]);
+            setCloudFiles([]);
         }
-      }
     };
-    fetchProjects();
-    return () => { mounted = false; };
-  }, []);
+
+    // 1. Obtener sesión inicial
+    supabase.auth.getSession().then(({ data: { session } }) => {
+        initData(session);
+    });
+
+    // 2. Escuchar cambios de auth
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        initData(session);
+    });
+
+    return () => { 
+        mounted = false; 
+        subscription.unsubscribe();
+    };
+  }, [fetchProjects, refreshCloudFiles]);
 
   const createProject = async (projectData) => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -76,6 +187,21 @@ export function DataProvider({ children }) {
       setProjects(prev => [newProject, ...prev]);
       showToast('Proyecto creado exitosamente.', 'success');
       logSystemEvent('PROJECT_CREATE', { id: newProject.id, name: newProject.name });
+  };
+
+  const updateProject = async (projectId, updates) => {
+      const { error } = await supabase.from('projects').update(updates).eq('id', projectId);
+
+      if (error) {
+          showToast('Error al actualizar proyecto: ' + error.message, 'error');
+          return;
+      }
+
+      setProjects(prev => prev.map(p => 
+          p.id === projectId ? { ...p, ...updates } : p
+      ));
+      
+      showToast('Proyecto actualizado.', 'success');
   };
 
   const deleteProject = async (projectId) => {
@@ -114,63 +240,6 @@ export function DataProvider({ children }) {
       ));
       
       showToast('Archivo movido al proyecto.', 'success');
-  };
-
-  useEffect(() => {
-    let mounted = true;
-    const initSession = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user && mounted) {
-        setUserEmail(user.email);
-        try {
-          // Obtener o Crear Perfil (Self-healing)
-          let { data: profile } = await supabase
-            .from('profiles')
-            .select('tier, uploads_count')
-            .eq('id', user.id)
-            .maybeSingle(); 
-
-          if (!profile) {
-             const { data: newProfile } = await supabase
-               .from('profiles')
-               .insert({ id: user.id, email: user.email, tier: 'free', uploads_count: 0 })
-               .select()
-               .single();
-             profile = newProfile;
-          }
-          
-          if (profile) {
-            setUserTier(profile.tier || 'free');
-            // setUploadsUsed(profile.uploads_count || 0); // Deshabilitado para usar cloudFiles.length como límite activo
-          }
-        } catch (e) { console.error("Error perfil:", e); }
-
-        await refreshCloudFiles(user.id);
-      }
-    };
-    initSession();
-    return () => { mounted = false; };
-  }, []);
-
-
-
-  // --- 1. INICIALIZACIÓN ---
-  const refreshCloudFiles = async (userId) => {
-    const uid = userId || (await supabase.auth.getUser()).data.user?.id;
-    if (!uid) return;
-    
-    // Ahora obtenemos el campo project_id directamente de la base de datos
-    const { data: files } = await supabase.from('user_files').select('*').eq('user_id', uid).order('created_at', { ascending: false });
-    
-    if (files) {
-      // Mapeamos para mantener compatibilidad con el frontend que usa 'projectId'
-      const filesWithProjects = files.map(f => ({
-          ...f,
-          projectId: f.project_id // Asumimos que la columna en BD se llama project_id
-      }));
-      setCloudFiles(filesWithProjects);
-      setIsLoadingFiles(false);
-    }
   };
 
   // --- 2. TOASTS (Con UUID) ---
@@ -499,7 +568,8 @@ export function DataProvider({ children }) {
     isLoadingFiles, refreshCloudFiles,
     registerFile, updateExistingFile, deleteFile, restoreFile, permanentDeleteFile, canUploadNew, redirectToBilling,
     checkAutomationRules, logSystemEvent,
-    projects, createProject, deleteProject, assignFileToProject
+    projects, createProject, updateProject, deleteProject, assignFileToProject,
+    theme, toggleTheme, userProfile, updateProfile
   };
 
   return (

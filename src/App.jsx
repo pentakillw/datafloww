@@ -45,8 +45,8 @@ export default function App() {
   return (
     <DataProvider>
       <Routes>
-        {/* Ruta pública: Landing Page */}
-        <Route path="/landing" element={!session ? <LandingPage /> : <Navigate to="/" />} />
+        {/* Ruta pública: Landing Page (Accesible siempre) */}
+        <Route path="/landing" element={<LandingPage />} />
         
         {/* Rutas Legales (Públicas) */}
         <Route path="/terms" element={<TermsPage />} />

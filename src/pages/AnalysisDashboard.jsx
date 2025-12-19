@@ -1,5 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import { useData } from '../context/DataContext';
+import { useI18n } from '../i18n/i18n.jsx';
 import { 
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend
 } from 'recharts';
@@ -9,6 +10,8 @@ import {
 
 export default function AnalysisDashboard() {
   const { data, columns } = useData();
+  const { t } = useI18n();
+  const adRef = useRef(null);
 
   const stats = useMemo(() => {
     if (!data || data.length === 0) return null;
@@ -91,14 +94,39 @@ export default function AnalysisDashboard() {
   // Colores para gráficas
   const COLORS = ['#029CA3', '#07B5A7', '#A6E3E9', '#2F4858', '#FFBB28', '#FF8042'];
 
+  // Inyección del banner (468x60) de forma segura dentro del contenedor
+  useEffect(() => {
+    const container = adRef.current;
+    if (!container) return;
+    container.innerHTML = '';
+    const opt = document.createElement('script');
+    opt.type = 'text/javascript';
+    opt.text = `
+      atOptions = {
+        'key' : '47946a59b4ccee0990d1650b4f39fed5',
+        'format' : 'iframe',
+        'height' : 60,
+        'width' : 468,
+        'params' : {}
+      };
+    `;
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.src = 'https://www.highperformanceformat.com/47946a59b4ccee0990d1650b4f39fed5/invoke.js';
+    script.async = true;
+    container.appendChild(opt);
+    container.appendChild(script);
+    return () => { if (container) container.innerHTML = ''; };
+  }, []);
+
   if (!data || data.length === 0) {
     return (
       <div className="h-full flex items-center justify-center p-3 bg-gray-50/50 dark:bg-black/20">
-         <div className="flex flex-col items-center text-gray-400 dark:text-wolf opacity-60">
-            <FileBarChart size={64} className="mb-4" />
-            <h2 className="text-xl font-bold">Sin datos para analizar</h2>
-            <p className="text-sm">Carga un archivo en la sección "Datos" primero.</p>
-         </div>
+        <div className="flex flex-col items-center text-gray-400 dark:text-wolf opacity-60">
+           <FileBarChart size={64} className="mb-4" />
+           <h2 className="text-xl font-bold">{t('analysis.noDataTitle')}</h2>
+           <p className="text-sm">{t('analysis.noDataSubtitle')}</p>
+        </div>
       </div>
     );
   }
@@ -108,46 +136,53 @@ export default function AnalysisDashboard() {
       <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-carbon relative z-10 rounded-xl border border-gray-200 dark:border-wolf/10 shadow-sm overflow-auto h-full p-6 md:p-8 custom-scrollbar">
         
         {/* Header */}
-        <div className="flex justify-between items-end mb-8">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 gap-4">
           <div>
             <h2 className="text-3xl font-bold text-gray-900 dark:text-zinc tracking-tight flex items-center gap-3">
-               <Activity className="text-persian" size={32} /> Reporte de Análisis
+               <Activity className="text-persian" size={32} /> {t('analysis.headerTitle')}
             </h2>
-            <p className="text-gray-500 dark:text-wolf mt-1">Diagnóstico automático de calidad y patrones de datos.</p>
+            <p className="text-gray-500 dark:text-wolf mt-1">{t('analysis.headerSubtitle')}</p>
           </div>
           
-          <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-white/5 rounded-lg border border-gray-200 dark:border-wolf/10">
+          <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-white/5 rounded-lg border border-gray-200 dark:border-wolf/10 w-full md:w-auto justify-center">
              <ShieldCheck size={18} className={stats.qualityScore > 80 ? "text-green-500" : stats.qualityScore > 50 ? "text-yellow-500" : "text-red-500"} />
-             <span className="text-sm font-bold text-gray-700 dark:text-zinc">Calidad del Dataset: <span className={stats.qualityScore > 80 ? "text-green-600" : "text-yellow-600"}>{stats.qualityScore}%</span></span>
+             <span className="text-sm font-bold text-gray-700 dark:text-zinc">{t('analysis.qualityLabel')} <span className={stats.qualityScore > 80 ? "text-green-600" : "text-yellow-600"}>{stats.qualityScore}%</span></span>
+          </div>
+        </div>
+
+        {/* Banner Publicitario (centrado, tamaño estándar 468x60) */}
+        <div className="w-full flex justify-center mb-6">
+          <div className="rounded-xl border border-gray-200 dark:border-wolf/10 bg-white dark:bg-carbon-light p-2 shadow-sm">
+            <div ref={adRef} style={{ width: 468, height: 60 }} className="flex items-center justify-center" />
           </div>
         </div>
 
         {/* 1. KPIs Principales */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <KpiCard 
-            title="Total Filas" 
+            title={t('analysis.kpis.totalRows')} 
             value={stats.totalRows.toLocaleString()} 
             icon={<Hash />} 
             color="text-blue-500" 
             bg="bg-blue-500/10" 
           />
           <KpiCard 
-            title="Total Columnas" 
+            title={t('analysis.kpis.totalCols')} 
             value={stats.totalCols} 
             icon={<Layers />} 
             color="text-purple-500" 
             bg="bg-purple-500/10" 
           />
           <KpiCard 
-            title="Celdas Vacías" 
+            title={t('analysis.kpis.emptyCells')} 
             value={stats.nullCount.toLocaleString()} 
             icon={<AlertTriangle />} 
             color={stats.nullCount > 0 ? "text-orange-500" : "text-green-500"} 
             bg={stats.nullCount > 0 ? "bg-orange-500/10" : "bg-green-500/10"}
-            subtext={stats.nullCount > 0 ? "Requiere limpieza" : "Dataset limpio"}
+            subtext={stats.nullCount > 0 ? t('analysis.kpis.needsCleaning') : t('analysis.kpis.datasetClean')}
           />
           <KpiCard 
-            title="Campos de Texto" 
+            title={t('analysis.kpis.textFields')} 
             value={stats.pieData.find(d => d.name === 'Texto')?.value || 0} 
             icon={<Type />} 
             color="text-persian" 
@@ -162,10 +197,10 @@ export default function AnalysisDashboard() {
             <div className="lg:col-span-2 bg-gray-50 dark:bg-carbon-light p-6 rounded-xl border border-gray-200 dark:border-wolf/20 shadow-sm flex flex-col h-[350px]">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="font-bold text-lg text-gray-800 dark:text-zinc flex items-center gap-2">
-                        <FileBarChart size={18} className="text-persian"/> Distribución de Frecuencia
+                        <FileBarChart size={18} className="text-persian"/> {t('analysis.charts.frequencyDistTitle')}
                     </h3>
                     <span className="text-xs bg-white dark:bg-black/20 px-3 py-1 rounded-full border border-gray-200 dark:border-wolf/10 text-gray-500 dark:text-wolf font-mono">
-                        Columna: {stats.categoryCol}
+                        {t('analysis.charts.columnLabel')} {stats.categoryCol}
                     </span>
                 </div>
                 <div className="flex-1 w-full min-h-0">
@@ -191,7 +226,7 @@ export default function AnalysisDashboard() {
             {/* Gráfica de Pastel (Tipos de Datos) - Ocupa 1 espacio */}
             <div className="bg-gray-50 dark:bg-carbon-light p-6 rounded-xl border border-gray-200 dark:border-wolf/20 shadow-sm flex flex-col h-[350px]">
                 <h3 className="font-bold text-lg mb-6 text-gray-800 dark:text-zinc flex items-center gap-2">
-                    <Info size={18} className="text-blue-400"/> Estructura de Datos
+                    <Info size={18} className="text-blue-400"/> {t('analysis.charts.dataStructureTitle')}
                 </h3>
                 <div className="flex-1 w-full min-h-0 relative">
                     <ResponsiveContainer width="100%" height="100%">
@@ -217,7 +252,7 @@ export default function AnalysisDashboard() {
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="text-center">
                             <span className="block text-2xl font-bold text-gray-800 dark:text-white">{stats.totalCols}</span>
-                            <span className="text-[10px] text-gray-500 uppercase tracking-widest">Cols</span>
+                            <span className="text-[10px] text-gray-500 uppercase tracking-widest">{t('analysis.charts.colsShort')}</span>
                         </div>
                     </div>
                 </div>
@@ -229,7 +264,7 @@ export default function AnalysisDashboard() {
             <div className="bg-gray-50 dark:bg-carbon-light p-6 rounded-xl border border-gray-200 dark:border-wolf/20 shadow-sm flex flex-col h-[300px]">
                 <div className="flex justify-between items-center mb-4">
                     <h3 className="font-bold text-lg text-gray-800 dark:text-zinc flex items-center gap-2">
-                        <TrendingUp size={18} className="text-sea"/> Análisis de Tendencia Numérica
+                        <TrendingUp size={18} className="text-sea"/> {t('analysis.charts.numericTrendTitle')}
                     </h3>
                     <div className="flex items-center gap-2">
                         <span className="w-3 h-3 rounded-full bg-sea"></span>
