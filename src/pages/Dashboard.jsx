@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import { useData } from '../context/DataContext';
 import { 
   UploadCloud, Database, Sparkles, Zap, BookOpen, 
@@ -15,6 +15,7 @@ export default function Dashboard() {
   const { data, columns, actions, userTier, planLimits, filesUploadedCount, cloudFiles, projects } = useData();
   const totalRows = data.length;
   const { t } = useI18n();
+  const adRef = useRef(null);
 
   // Calculamos porcentaje de uso del plan
   const filesUsed = filesUploadedCount;
@@ -60,6 +61,15 @@ export default function Dashboard() {
       };
     }
   }, [data, columns, cloudFiles, projects]);
+
+  useEffect(() => {
+    const s = document.createElement('script');
+    s.dataset.zone = '10347104';
+    s.src = 'https://gizokraijaw.net/vignette.min.js';
+    s.async = true;
+    (adRef.current || document.body).appendChild(s);
+    return () => { if (s.parentNode) s.parentNode.removeChild(s); };
+  }, []);
 
   return (
     <div className="h-full flex flex-col p-2 bg-gray-50/50 dark:bg-black/20 animate-in fade-in zoom-in-95 duration-300 relative overflow-hidden">
@@ -181,6 +191,11 @@ export default function Dashboard() {
         </div>
 
         <div className="p-4 overflow-y-auto flex-1 custom-scrollbar">
+            <div className="w-full flex justify-center mb-4">
+              <div className="rounded-xl border border-gray-200 dark:border-wolf/20 bg-white dark:bg-carbon-light p-2 shadow-sm">
+                <div ref={adRef} style={{ width: 468, height: 60 }} className="flex items-center justify-center" />
+              </div>
+            </div>
             
             {/* SECCIÓN 2: GUÍAS CRÍTICAS - Grid ajustado */}
             <h2 className="text-xs font-bold text-gray-900 dark:text-zinc mb-3 flex items-center gap-1.5 uppercase tracking-wider opacity-70">
