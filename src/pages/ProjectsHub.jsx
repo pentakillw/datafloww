@@ -174,12 +174,17 @@ export default function ProjectsHub() {
                     </h1>
                     <p className="text-gray-500 dark:text-wolf mt-1">{t('projects.subtitle')}</p>
                 </div>
-                <button 
-                    onClick={() => setShowCreateModal(true)}
-                    className="bg-persian hover:bg-sea text-white px-6 py-2 rounded-xl font-bold shadow-lg shadow-persian/20 flex items-center gap-2 transition-all active:scale-95 w-full sm:w-auto justify-center"
-                >
-                    <Plus size={20} /> {t('projects.newProject')}
-                </button>
+                <div className="flex flex-col items-end gap-3 w-full sm:w-auto">
+                    <button 
+                        onClick={() => setShowCreateModal(true)}
+                        className="bg-persian hover:bg-sea text-white px-6 py-2 rounded-xl font-bold shadow-lg shadow-persian/20 flex items-center gap-2 transition-all active:scale-95 w-full sm:w-auto justify-center"
+                    >
+                        <Plus size={20} /> {t('projects.newProject')}
+                    </button>
+                    <div className="hidden md:block rounded-xl border border-gray-200 dark:border-wolf/20 bg-white dark:bg-carbon-light p-2 shadow-sm w-full max-w-xl">
+                        <div id="container-8a566d6feade804a2f4700c96ef4dae9"></div>
+                    </div>
+                </div>
             </div>
 
             <div className="flex flex-col sm:flex-row items-center gap-4 mb-6">
@@ -256,33 +261,6 @@ export default function ProjectsHub() {
                                 </div>
                             );
                         })}
-                        {viewMode === 'grid' ? (
-                            <div className="bg-white dark:bg-carbon border border-gray-200 dark:border-wolf/10 rounded-xl p-5 shadow-sm hover:shadow-md transition-all">
-                                <div className="flex items-start justify-between mb-3">
-                                    <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-purple-600 dark:text-purple-400">
-                                        <FolderPlus size={20} />
-                                    </div>
-                                    <span className="text-[10px] text-gray-400 font-mono">Ad</span>
-                                </div>
-                                <div className="text-sm text-gray-500 dark:text-wolf mb-3">Sugerencias</div>
-                                <div id="container-8a566d6feade804a2f4700c96ef4dae9"></div>
-                            </div>
-                        ) : (
-                            <div className="bg-white dark:bg-carbon border border-gray-200 dark:border-wolf/10 rounded-xl p-4 shadow-sm flex items-center justify-between">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400">
-                                        <FolderPlus size={24} />
-                                    </div>
-                                    <div>
-                                        <h3 className="font-bold text-lg text-gray-900 dark:text-white mb-1">Sugerencias</h3>
-                                        <p className="text-sm text-gray-500 dark:text-wolf">Contenido recomendado</p>
-                                    </div>
-                                </div>
-                                <div className="w-full max-w-xs">
-                                    <div id="container-8a566d6feade804a2f4700c96ef4dae9"></div>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 )}
             </div>
