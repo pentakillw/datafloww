@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useData } from '../context/DataContext';
 import { useI18n } from '../i18n/i18n.jsx';
 import { 
@@ -33,6 +33,7 @@ export default function ExportHub() {
   const [isSending, setIsSending] = useState(false);
   const [sendResult, setSendResult] = useState(null); // { success: boolean, message: string }
   const { t } = useI18n();
+  const adRefExport = useRef(null);
 
   // Detección de sugerencias de automatización
   const suggestion = actions.find(a => a.type === 'SUGGEST_EXPORT');
@@ -44,6 +45,30 @@ export default function ExportHub() {
           if (suggestion.format === 'JSON') setActiveTab('files'); // JSON está en files
       }
   }, [suggestion]);
+
+  useEffect(() => {
+    const container = adRefExport.current;
+    if (!container) return;
+    container.innerHTML = '';
+    const opt = document.createElement('script');
+    opt.type = 'text/javascript';
+    opt.text = `
+      atOptions = {
+        'key' : '60124eb1237fa97273b8035e892216c5',
+        'format' : 'iframe',
+        'height' : 600,
+        'width' : 160,
+        'params' : {}
+      };
+    `;
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.src = 'https://www.highperformanceformat.com/60124eb1237fa97273b8035e892216c5/invoke.js';
+    script.async = true;
+    container.appendChild(opt);
+    container.appendChild(script);
+    return () => { if (container) container.innerHTML = ''; };
+  }, []);
 
   // --- PREPARAR PIPELINES PARA PYTHON ---
   const preparePythonPipelines = () => {
@@ -180,6 +205,11 @@ export default function ExportHub() {
         </div>
 
         <div className="flex-1 p-6 bg-gray-50 dark:bg-black/20 overflow-auto custom-scrollbar relative">
+          <div className="hidden lg:flex absolute right-6 top-6">
+            <div className="rounded-xl border border-gray-200 dark:border-wolf/20 bg-white dark:bg-carbon-light p-2 shadow-sm">
+              <div ref={adRefExport} style={{ width: 160, height: 600 }} className="flex items-center justify-center" />
+            </div>
+          </div>
           {!data.length ? (
              <div className="h-full flex flex-col items-center justify-center opacity-50">
                <Package size={48} className="mb-4 text-gray-400"/>

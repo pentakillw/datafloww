@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo } from 'react';
+import React, { useRef, useState, useMemo, useEffect } from 'react';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { useData } from '../context/DataContext';
@@ -360,6 +360,31 @@ export default function DataWorkspace() {
       fileInputRef.current.click();
   };
 
+  const adRefRight = useRef(null);
+  useEffect(() => {
+    const container = adRefRight.current;
+    if (!container) return;
+    container.innerHTML = '';
+    const opt = document.createElement('script');
+    opt.type = 'text/javascript';
+    opt.text = `
+      atOptions = {
+        'key' : 'dff78f4f305680f052395c26a76683ea',
+        'format' : 'iframe',
+        'height' : 300,
+        'width' : 160,
+        'params' : {}
+      };
+    `;
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.src = 'https://www.highperformanceformat.com/dff78f4f305680f052395c26a76683ea/invoke.js';
+    script.async = true;
+    container.appendChild(opt);
+    container.appendChild(script);
+    return () => { if (container) container.innerHTML = ''; };
+  }, []);
+
   return (
     <div className="h-full flex items-start p-3 bg-gray-50/50 dark:bg-black/20 animate-in fade-in zoom-in-95 duration-300 relative overflow-hidden">
       
@@ -654,6 +679,11 @@ export default function DataWorkspace() {
                 </div>
                 <div className="w-full bg-gray-200 dark:bg-black/30 h-1.5 rounded-full mt-1 overflow-hidden">
                     <div className={`h-full transition-all duration-500 ${!canUploadNew ? 'bg-red-500' : 'bg-persian'}`} style={{ width: `${Math.min(100, (filesUploadedCount/planLimits.maxFiles)*100)}%` }}></div>
+                </div>
+                <div className="hidden md:flex justify-center mt-3">
+                  <div className="rounded-xl border border-gray-200 dark:border-wolf/20 bg-white dark:bg-carbon-light p-2 shadow-sm">
+                    <div ref={adRefRight} style={{ width: 160, height: 300 }} className="flex items-center justify-center" />
+                  </div>
                 </div>
             </div>
             

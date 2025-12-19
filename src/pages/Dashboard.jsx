@@ -63,12 +63,27 @@ export default function Dashboard() {
   }, [data, columns, cloudFiles, projects]);
 
   useEffect(() => {
-    const s = document.createElement('script');
-    s.dataset.zone = '10347106';
-    s.src = 'https://gizokraijaw.net/vignette.min.js';
-    s.async = true;
-    (adRef.current || document.body).appendChild(s);
-    return () => { if (s.parentNode) s.parentNode.removeChild(s); };
+    const container = adRef.current;
+    if (!container) return;
+    container.innerHTML = '';
+    const opt = document.createElement('script');
+    opt.type = 'text/javascript';
+    opt.text = `
+      atOptions = {
+        'key' : '3452c72ad45c5ef8a14dc39c54932a89',
+        'format' : 'iframe',
+        'height' : 250,
+        'width' : 300,
+        'params' : {}
+      };
+    `;
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.src = 'https://www.highperformanceformat.com/3452c72ad45c5ef8a14dc39c54932a89/invoke.js';
+    script.async = true;
+    container.appendChild(opt);
+    container.appendChild(script);
+    return () => { if (container) container.innerHTML = ''; };
   }, []);
 
   return (
@@ -110,7 +125,7 @@ export default function Dashboard() {
              </div>
            </div>
         </div>
-        
+
         {/* INSIGHTS & STATS SECTION (Nuevo) */}
         <div className="bg-gray-50 dark:bg-carbon-light px-4 py-3 border-b border-gray-200 dark:border-wolf/20 flex-shrink-0">
             <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-3">
@@ -191,9 +206,9 @@ export default function Dashboard() {
         </div>
 
         <div className="p-4 overflow-y-auto flex-1 custom-scrollbar">
-            <div className="w-full flex justify-center mb-4">
+            <div className="w-full flex justify-end mb-4">
               <div className="rounded-xl border border-gray-200 dark:border-wolf/20 bg-white dark:bg-carbon-light p-2 shadow-sm">
-                <div ref={adRef} style={{ width: 468, height: 60 }} className="flex items-center justify-center" />
+                <div ref={adRef} style={{ width: 300, height: 250 }} className="flex items-center justify-center" />
               </div>
             </div>
             

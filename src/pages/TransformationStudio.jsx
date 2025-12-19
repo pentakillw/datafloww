@@ -141,6 +141,30 @@ export default function TransformationStudio() {
     }
   }, [headerMenuOpen, activeModal, activeCol, actions, originalData, originalColumns, transform]);
 
+  const adRefStudio = useRef(null);
+  useEffect(() => {
+    const container = adRefStudio.current;
+    if (!container) return;
+    container.innerHTML = '';
+    const opt = document.createElement('script');
+    opt.type = 'text/javascript';
+    opt.text = `
+      atOptions = {
+        'key' : '86c2bc3cb29c267c15f0d20e0ea69b8e',
+        'format' : 'iframe',
+        'height' : 50,
+        'width' : 320,
+        'params' : {}
+      };
+    `;
+    const script = document.createElement('script');
+    script.type = 'text/javascript';
+    script.src = 'https://www.highperformanceformat.com/86c2bc3cb29c267c15f0d20e0ea69b8e/invoke.js';
+    script.async = true;
+    container.appendChild(opt);
+    container.appendChild(script);
+    return () => { if (container) container.innerHTML = ''; };
+  }, []);
   const closeModal = () => {
     setActiveModal(null);
     setFindText(''); setReplaceText(''); setAffixText(''); setFilterValue('');
@@ -353,6 +377,12 @@ export default function TransformationStudio() {
                <History size={14} /> {t('studio.historyTitle')}
              </button>
           )}
+        </div>
+
+        <div className="flex justify-center py-2">
+          <div className="rounded-xl border border-gray-200 dark:border-wolf/20 bg-white dark:bg-carbon-light p-2 shadow-sm">
+            <div ref={adRefStudio} style={{ width: 320, height: 50 }} className="flex items-center justify-center" />
+          </div>
         </div>
 
         {/* --- MODALES Y MENÚ FLOTANTE --- */}
