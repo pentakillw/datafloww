@@ -20,11 +20,14 @@ export default function ProjectsHub() {
         const container = document.getElementById('container-8a566d6feade804a2f4700c96ef4dae9');
         if (!container) return;
         container.innerHTML = '';
-        const script = document.createElement('script');
-        script.async = true;
-        script.setAttribute('data-cfasync', 'false');
-        script.src = 'https://pl28288176.effectivegatecpm.com/8a566d6feade804a2f4700c96ef4dae9/invoke.js';
-        document.body.appendChild(script);
+        const existing = document.querySelector('script[src="https://pl28288176.effectivegatecpm.com/8a566d6feade804a2f4700c96ef4dae9/invoke.js"]');
+        if (!existing) {
+            const script = document.createElement('script');
+            script.async = true;
+            script.setAttribute('data-cfasync', 'false');
+            script.src = 'https://pl28288176.effectivegatecpm.com/8a566d6feade804a2f4700c96ef4dae9/invoke.js';
+            document.body.appendChild(script);
+        }
         return () => { if (container) container.innerHTML = ''; };
     }, []);
     
