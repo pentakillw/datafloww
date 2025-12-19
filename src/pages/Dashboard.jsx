@@ -206,11 +206,6 @@ export default function Dashboard() {
         </div>
 
         <div className="p-4 overflow-y-auto flex-1 custom-scrollbar">
-            <div className="w-full flex justify-end mb-4">
-              <div className="rounded-xl border border-gray-200 dark:border-wolf/20 bg-white dark:bg-carbon-light p-2 shadow-sm">
-                <div ref={adRef} style={{ width: 300, height: 250 }} className="flex items-center justify-center" />
-              </div>
-            </div>
             
             {/* SECCIÓN 2: GUÍAS CRÍTICAS - Grid ajustado */}
             <h2 className="text-xs font-bold text-gray-900 dark:text-zinc mb-3 flex items-center gap-1.5 uppercase tracking-wider opacity-70">
@@ -256,6 +251,12 @@ export default function Dashboard() {
                 <ActionCard icon={<UploadCloud size={20} />} title={t('dashboard.actions.uploadTitle')} desc={t('dashboard.actions.uploadDesc')} onClick={() => navigate('/data')} color="persian" active={data.length === 0} />
                 <ActionCard icon={<Sparkles size={20} />} title={t('dashboard.actions.transformTitle')} desc={t('dashboard.actions.transformDesc')} onClick={() => navigate('/transform')} color="sea" active={data.length > 0 && actions.length === 0} disabled={data.length === 0} />
                 <ActionCard icon={<FileSpreadsheet size={20} />} title={t('dashboard.actions.exportTitle')} desc={t('dashboard.actions.exportDesc')} onClick={() => navigate('/export')} color="purple-500" active={actions.length > 0} disabled={data.length === 0} />
+            </div>
+
+            <div className="w-full flex justify-end mt-6">
+              <div className="rounded-xl border border-gray-200 dark:border-wolf/20 bg-white dark:bg-carbon-light p-2 shadow-sm">
+                <div ref={adRef} style={{ width: 300, height: 250 }} className="flex items-center justify-center" />
+              </div>
             </div>
 
         </div>

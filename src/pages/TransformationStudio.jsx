@@ -379,11 +379,7 @@ export default function TransformationStudio() {
           )}
         </div>
 
-        <div className="flex justify-center py-2">
-          <div className="rounded-xl border border-gray-200 dark:border-wolf/20 bg-white dark:bg-carbon-light p-2 shadow-sm">
-            <div ref={adRefStudio} style={{ width: 320, height: 50 }} className="flex items-center justify-center" />
-          </div>
-        </div>
+        
 
         {/* --- MODALES Y MENÚ FLOTANTE --- */}
         
@@ -711,6 +707,11 @@ export default function TransformationStudio() {
               </div>
             ))
           )}
+        </div>
+        <div className="p-3 border-t border-gray-200 dark:border-wolf/20 bg-gray-50 dark:bg-[#1a1a1a]">
+          <div className="rounded-xl border border-gray-200 dark:border-wolf/20 bg-white dark:bg-carbon-light p-2 shadow-sm">
+            <div ref={adRefStudio} style={{ width: 320, height: 50 }} className="flex items-center justify-center" />
+          </div>
         </div>
       </div>
     </div>
