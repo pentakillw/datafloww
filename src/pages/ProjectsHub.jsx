@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useData } from '../context/DataContext';
 import { 
     Folder, FolderPlus, Search, Calendar, FileText, 
@@ -16,6 +16,17 @@ export default function ProjectsHub() {
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [editingProject, setEditingProject] = useState(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    useEffect(() => {
+        const container = document.getElementById('container-8a566d6feade804a2f4700c96ef4dae9');
+        if (!container) return;
+        container.innerHTML = '';
+        const script = document.createElement('script');
+        script.async = true;
+        script.setAttribute('data-cfasync', 'false');
+        script.src = 'https://pl28288176.effectivegatecpm.com/8a566d6feade804a2f4700c96ef4dae9/invoke.js';
+        document.body.appendChild(script);
+        return () => { if (container) container.innerHTML = ''; };
+    }, []);
     
     // Project Form (Shared for Create/Edit)
     const [projectName, setProjectName] = useState('');
@@ -182,6 +193,12 @@ export default function ProjectsHub() {
                 <div className="flex bg-white dark:bg-carbon border border-gray-200 dark:border-wolf/20 rounded-lg p-1 self-end sm:self-auto">
                     <button onClick={() => setViewMode('grid')} className={`p-2 rounded ${viewMode === 'grid' ? 'bg-gray-100 dark:bg-white/10 text-persian' : 'text-gray-400'}`}><LayoutGrid size={18}/></button>
                     <button onClick={() => setViewMode('list')} className={`p-2 rounded ${viewMode === 'list' ? 'bg-gray-100 dark:bg-white/10 text-persian' : 'text-gray-400'}`}><ListIcon size={18}/></button>
+                </div>
+            </div>
+
+            <div className="w-full flex justify-center mb-6">
+                <div className="rounded-xl border border-gray-200 dark:border-wolf/20 bg-white dark:bg-carbon-light p-2 shadow-sm w-full max-w-xl">
+                    <div id="container-8a566d6feade804a2f4700c96ef4dae9"></div>
                 </div>
             </div>
 
